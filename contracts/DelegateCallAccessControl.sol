@@ -34,10 +34,15 @@ interface ISafe {
 
 /**
  * @title DelegateCallAccessControl
- * @dev A Zodiac guard module that protects delegatecall operations by verifying the target address
+ * @dev A Zodiac guard module that protects delegatecall operations by verifying the candidateDelegate address
  * is in an authorized list. Uses the Delay module for timelock functionality.
  */
 contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
+    // Define our function selectors
+    bytes4 isAuthorizedSelector = bytes4(keccak256("isAuthorized(address)"));
+    bytes4 requestAuthorizationSelector = bytes4(keccak256("requestAuthorization(address)"));
+    bytes4 removeAuthorizationSelector = bytes4(keccak256("removeAuthorization(address)"));
+    
     // Constants
     uint256 public constant DELEGATECALL_OPERATION = 1;
     
@@ -52,9 +57,9 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
     
     // Events
     event DelayModuleSet(address indexed delayModule);
-    event AddressAuthorized(address indexed targetAddress);
-    event AddressAuthorizationRemoved(address indexed targetAddress);
-    event AuthorizationRequested(address indexed targetAddress);
+    event AddressAuthorized(address indexed candidateDelegate);
+    event AddressAuthorizationRemoved(address indexed candidateDelegate);
+    event AuthorizationRequested(address indexed candidateDelegate);
     
     /**
      * @dev Constructor for direct deployment
@@ -106,12 +111,16 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
         emit DelayModuleSet(_delay);
     }
     
+    function isAuthorized(address candidateDelegate) internal view returns (bool) {
+        require(authorizedAddresses[candidateDelegate], "Address not authorized for delegatecall");
+        // return authorizedAddresses[candidateDelegate];
+    }
     /**
      * @dev Requests authorization for a new address to be used with delegatecall
      * This will queue the authorization request in the Delay module
      * @param _targetAddress Address to be authorized
      */
-    function requestAuthorization(address _targetAddress) external {
+    function requestAuthorization(address _targetAddress) internal {
         require(_targetAddress != address(0), "Invalid address");
         require(!authorizedAddresses[_targetAddress], "Address already authorized");
         
@@ -150,7 +159,7 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
      * @dev Removes an address from the authorized list
      * @param _targetAddress Address to be removed
      */
-    function removeAuthorization(address _targetAddress) external {
+    function removeAuthorization(address _targetAddress) internal {
         require(authorizedAddresses[_targetAddress], "Address not authorized");
         
         authorizedAddresses[_targetAddress] = false;
@@ -159,7 +168,11 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
     }
     
     /**
-     * @dev Checks if a transaction is allowed to be executed
+     * @dev Provides the following functionalities:
+     * - isAuthorized(address) -> returns true if the address is authorized for delegatecall
+     * - requestAuthorization(address) -> requests authorization for a new address to be used with delegatecall, after the cooldown period.
+     * - removeAuthorization(address) -> removes an address from the authorized list
+     * 
      * Only verifies the target address if the operation is delegatecall (1)
      * @param to Destination address of Safe transaction
      * @param value Ether value of Safe transaction
@@ -186,9 +199,56 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
         bytes memory signatures,
         address msgSender
     ) external override {
-        // Only check for delegatecall operations
-        if (uint256(operation) == DELEGATECALL_OPERATION) {
-            require(authorizedAddresses[to], "Delegatecall to unauthorized address");
+        if (operation == Enum.Operation.Call) {
+            return;
+        }
+        if (data.length >= 4) {
+            //data is packed with no pagging. check safe multisend
+            // slot 0  data.length 
+            // slot 1 : fn selector + target address
+            address candidateDelegate; // to authorize or to verify
+            bytes4 functionSelector; // verify or authorize
+            require(data.length == 24, "Data length invalid"); // fnselector (4bytes) + address expected (20bytes)
+
+            // load encoded the 2 variables
+            assembly {
+                // slot 1  : addr 0x0  - 0x20 : data.length, ignored
+                // slot 2  : addr 0x20 - 0x40 : function selector + candidateDelegate address + padding
+                
+                // load slot 1 with fn selector + candidateDelegate address
+                let dataTmp := mload(add(data, 32))
+
+                // moves the fnSelector to the last 4 bytes (32 bits) (shift right 256 - 32 =  224 bits)
+                functionSelector := shr(224, _data)  
+
+                // address starts at 0x24
+                let addrTmp:= mload(add(data, 0x24))
+                
+                // moves the address to the last 20 bytes (160 bits) (shift right 256 - 160 = 96 bits)
+                let addr := shr(96,addrTmp) 
+            }
+            // cast to bytes4
+            functionSelector = bytes4(functionSelector);
+            
+            if (functionSelector == isAuthorizedSelector) {
+                isAuthorized(candidateDelegate);
+            } 
+            else if (functionSelector == requestAuthorizationSelector) {
+            
+                delay.execTransactionFromModule(
+                    address(this),
+                    0,
+                    abi.encodeWithSelector(this.confirmAuthorization.selector, candidateDelegate),
+                    Enum.Operation.Call
+                );
+            }
+            else if (functionSelector == removeAuthorizationSelector) {
+                
+                removeAuthorization(candidateDelegate);
+            }
+            else{
+                revert("Invalid functionality");
+            }
         }
     }
     
