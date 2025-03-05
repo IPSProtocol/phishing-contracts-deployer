@@ -1,62 +1,58 @@
-
-# Zodiac DelegateCall Control Access Module
-
-Zodiac DelegateCall Control Access Module is an **Advanced Transaction Guard** for Safe Wallets, it designed to add additional security layers such as adding **delegated call restrictions** via an authorized list of addresses, as well as ensuring secure management of thoses lists.
-
-This module also allow list to be modified by the owners of the safe and following a delay to ensure visibility of any unanted modifications. given the security imacpts of calling wrong addresses using delegate
-
+# DelegateCall Control Access Module
 
 ## Overview
 
-This module adds an additional security layer to Safe Smart Accounts by controlling delegatecall operations, which are commonly used by externally developed modules to extend Safe functionality — such as meta-transactions, multicalls, and advanced automation.
+The **DelegateCall Control Access Module** is a **Zodiac Guard** designed to protect Safe Wallets from using `delegatecall` with untrusted contract address. 
 
-While Safe’s modular architecture promotes innovation and flexibility, it also introduces risks similar to granting privileged system access in traditional software. Externally developed modules, especially those using DELEGATECALL (operation = 1), can fully impersonate the Safe, making security reviews and audits critical before allowing their use.
+__Performing a delegatecall to an untrusted contract is the smart contract equivalent of granting admin permissions to a sketchy .exe file downloaded from a torrent, running it directly on your machine, and hoping it’s not malware.__
 
-This module enforces address whitelisting and module vetting, ensuring only pre-approved and verified addresses can execute delegatecalls. This adds essential protection against phishing attacks, malicious modules, and accidental interactions with untrusted addresses, all while integrating seamlessly with the Zodiac framework to support flexible governance. Regular Safe transactions (simple calls) remain unaffected.
 
-### Balancing Security and Functionality
+This module **strictly controls which addresses can be used in `delegatecall` operations**, while leaving regular calls completely unaffected. It offers **a quick and easy setup process, along with a built-in timelock mechanism that gives stakeholders visibility and time to monitor, react, and intervene in case of suspicious or critical events**. This makes it an ideal solution for DAOs and teams seeking **robust delegatecall protection** without unnecessary complexity.
 
-Delegatecalls are fundamental for the composability, modularity, and evolution of smart accounts:
+## Why It Matters
 
-- **Essential Features**: Meta-transactions, multi-calls, MFA and other UX improvements rely on delegatecall to execute in the privileged environment of the Safe account.
-- **Future Growth**: Such use cases will likely grow with updates like Pectra, enabling EOAs to set up automation via code.
-- **Security Tradeoff**: This module allows users to decide whether they want stricter control over their Safe sensitive features.
+Allowing **unrestricted delegate calls** exposes wallets to:
 
-## Security Features
+- **Full access to the wallet’s assets (ETH and tokens)** — enabling unrestricted transfers, approvals, and even fake event emissions.  
+- **Complete control over all assets and permissions within the Safe**, allowing an attacker to drain funds or manipulate approvals across the entire ecosystem.  
+- **Silent corruption or modification of your Safe’s storage and logic**, with no onchain trace in Safe’s transaction history and no automatic alerts to stakeholders.
 
-- **Delegatecall Protection**: Every delegatecall operation is verified against a mapping of authorized addresses, while normal calls proceed without additional checks.
 
-- **Owner Consensus Requirement**: Leverages the Safe's n/k signature scheme to ensure consensus among owners before adding new addresses to the authorized list.
-
-- **Timelock with Delay Modifier**: Implements a timelock mechanism using the Zodiac Delay modifier, providing a mandatory waiting period between authorization request and confirmation.
-
-- **Event Monitoring**: Emits detailed events at each step of the authorization process, enabling monitoring tools to notify users of pending changes so they can react if suspicious activity is detected.
-
-- **Replay Attack Prevention**: Keeps track of previously used authorization messages and hashes to prevent replay attacks.
-
-## How It Works
-
-1. **Authorization Request**: Safe owners must reach the required threshold of signatures to request authorization for a new delegatecall target.
-
-2. **Timelock Period**: After authorization is requested, a mandatory waiting period begins, during which monitoring tools can alert users to review the pending authorization.
-
-3. **Confirmation**: After the timelock period expires, the authorization can be confirmed, adding the target address to the authorized list.
-
-4. **Transaction Verification**: When a transaction is submitted to the Safe, the guard checks if the operation is a delegatecall. If it is, the target address is verified against the authorized list.
+---
 
 ## Features
 
-- Fine-grained access control for delegatecall operations
-- Integration with Zodiac governance modules
-- Configurable permission settings
-- Comprehensive test suite
-- Monitoring-friendly event emissions
+### ✅ Delegatecall-Specific Protection
+This module **only control delegatecalls**, leaving regular "call" Safe transactions unaffected. This keeps your Safe secure without interfering with day-to-day operations.
 
-## Development
+### ✅ Owners Consensus Required
+New delegatecall authorizations can only be approved with the **required Safe owner signatures**, ensuring strong governance and protecting against unilateral changes or cases where a single owner is tricked into approving a malicious action.
 
-This project uses Hardhat for development, testing, and deployment.
+### ✅ UX - Easy Integration and Setup
+Seamlessly **import all existing delegatecall modules** already in use by your Safe, and authorize them in **a single batch transaction** — reducing friction and setup time.
 
-### Setup
+### ✅ Observability & Incident Response
+The **Delay Module** enforces a mandatory timelock on new authorizations, giving Safe owners thanks to monitoring tools time to **review and respond** to suspicious changes before they take effect.
+
+### ✅ Compatible with Latest Safe Wallet
+Built to work seamlessly with the **latest version of Safe Wallet** and integrates directly into the Zodiac framework.
+
+---
+
+## How It Works
+
+1. **Deploy both the Delay Module and the DelegateCall Access (DCA) Module.**
+2. **Run our script to automatically gather all contracts currently used via delegatecall and generate a single transaction for Safe stakeholders to authorize them.**
+3. **All delegatecall attempts are blocked unless the target contract has been explicitly authorized.**
+4. **New authorizations require Safe owner signatures and are subject to a timelock — with the timelock duration configurable by the Safe itself — enabling onchain monitoring and alerting.**
+5. **Once the timelock expires, anyone can finalize the authorization to activate the approved changes.**
+6. **Deauthorization can happen instantly, as long as Safe owners reach the required consensus. Immediate deauthorization is critical in case a previously trusted contract becomes compromised.**
+
+Because delegatecalls pose significantly higher risks, this module focuses on securing them first. However, the design could be extended in the future to cover regular Safe transactions if desired. The core goal is to provide Safe Wallet users with **simple, effective tools to protect themselves against existing and emerging threats** — without adding unnecessary complexity.
+
+---
+
+## Quick Setup
 
 ```bash
 # Install dependencies
@@ -67,8 +63,3 @@ npx hardhat compile
 
 # Run tests
 npx hardhat test
-```
-
-## License
-
-[MIT](LICENSE)
