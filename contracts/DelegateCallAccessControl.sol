@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity ^0.8.6;
 
-import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
 import "@gnosis.pm/zodiac/contracts/core/Module.sol";
 import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
 import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Delay.sol";
+import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
 
 // Interface for the Safe contract to use its signature verification
 interface ISafe {
@@ -15,11 +15,11 @@ interface ISafe {
         bytes32 dataHash,
         bytes memory signatures
     ) external view;
-    
+
     function getThreshold() external view returns (uint256);
-    
+
     function nonce() external view returns (uint256);
-    
+
     function getTransactionHash(
         address to,
         uint256 value,
@@ -35,139 +35,190 @@ interface ISafe {
 }
 
 /**
- * @title DelegateCallAccessControl
+ * @title DelegatecallAccessControl
  * @dev A Zodiac guard module that protects delegatecall operations by verifying the candidateDelegate address
  * is in an authorized list. Uses the Delay module for timelock functionality.
  */
-contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
-    // Define our function selectors
-    bytes4 isAuthorizedSelector = bytes4(keccak256("isAuthorized(address)"));
-    bytes4 requestAuthorizationSelector = bytes4(keccak256("requestAuthorization(address)"));
-    bytes4 removeAuthorizationSelector = bytes4(keccak256("removeAuthorization(address)"));
-    
+contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
     // Constants
     uint256 public constant DELEGATECALL_OPERATION = 1;
-    
+
     // State variables
-    Delay public delay; 
-    
+    Delay public delayModule;
+
     // Mapping to store authorized addresses for delegatecall
     mapping(address => bool) public authorizedAddresses;
-    
+
     // Events
     event DelayModuleSet(address indexed delayModule);
     event AddressAuthorized(address indexed _target);
-    event AddressAuthorizationRemoved(address indexed _target);
-    event AuthorizationRequested(address indexed _target);
-    
+    event BatchAuthorizationRequested(address[] indexed _targets);
+    event BatchDeAuthorizationRequested(address[] indexed _targets);
+    event BatchAddressAuthorized(address[] indexed targets);
+    event BatchAddressRemoved(address[] indexed targets);
+
     /**
-     * @dev Constructor for direct deployment
+     * @dev Constructor for direct deployment, anyone can deploy this module but set _owner to the Safe address
      * @param _owner Address of the owner (typically the Safe)
-     * @param _avatar Address of the avatar (the Safe)
-     * @param _target Address of the target (the Safe)
-     * @param _delay Address of the Delay module
+     * @param _delayModule Address of the Delay module
      */
-    constructor(
-        address _owner,
-        address _avatar,
-        address _target,
-        address _delay
-    ) {
-        require(_delay != address(0), "Delay module cannot be zero address");
-        delay = Delay(_avatar);
-        setAvatar(_avatar);
-        setTarget(_target);
+    constructor(address _owner, address _delayModule) {
+        require(
+            _delayModule != address(0),
+            "Delay module cannot be zero address"
+        );
+        delayModule = Delay(_delayModule);
         transferOwnership(_owner);
-        
-        emit DelayModuleSet(_delay);
+
+        emit DelayModuleSet(address(delayModule));
     }
-    
+
     /**
      * @dev Initialize function, will be triggered when a new proxy is deployed
      * @param initializeParams Parameters of initialization encoded
      */
     function setUp(bytes memory initializeParams) public override initializer {
-        (address _owner, address _avatar, address _target, address _delay) = 
-            abi.decode(initializeParams, (address, address, address, address));
-        
-        require(_delay != address(0), "Delay module cannot be zero address");
-        delay = Delay(_delay);
-        
-        setAvatar(_avatar);
-        setTarget(_target);
-        transferOwnership(_owner);
-        
-        emit DelayModuleSet(_delay);
-    }
-    
-    /**
-     * @dev Sets a new Delay module
-     * @param _delay Address of the new Delay module
-     */
-    function setDelayModule(address _delay) external onlyOwner {
-        require(_delay != address(0), "Delay module cannot be zero address");
-        delay = Delay(_delay);
-        emit DelayModuleSet(_delay);
-    }
-    
-    function isAuthorized(address _target) internal view returns (bool) {
-        require(authorizedAddresses[_target], "Address not authorized for delegatecall");
-    }
-    
-    /**
-     * @dev Requests authorization for a new address to be used with delegatecall
-     * This will queue the authorization request in the Delay module
-     * @param _target Address to be authorized
-     */
-    function requestAuthorization(address _target) internal {
-        require(_target != address(0), "Invalid address");
-        require(!authorizedAddresses[_target], "Address already authorized");
-        
-        bytes memory data = abi.encodeWithSelector(
-            this.confirmAuthorization.selector,
-            _target
+        (address _owner, address _delayModule) = abi.decode(
+            initializeParams,
+            (address, address)
         );
-        
-        delay.execTransactionFromModule(
+
+        require(
+            _delayModule != address(0),
+            "Delay module cannot be zero address"
+        );
+        delayModule = Delay(_delayModule);
+
+        transferOwnership(_owner);
+
+        emit DelayModuleSet(_delayModule);
+    }
+
+    modifier onlyDelayModule() {
+        require(
+            msg.sender == address(delayModule),
+            "Only callable via Delay module"
+        );
+        _;
+    }
+
+    /**
+     * @dev Requests authorization for multiple addresses to be used with delegatecall
+     * This will queue a single authorization request in the Delay module
+     * @param _targets Array of addresses to be authorized
+     */
+    function requestBatchAuthorization(
+        address[] calldata _targets
+    ) external onlyOwner {
+        // Validate the input addresses
+        for (uint256 i = 0; i < _targets.length; i++) {
+            address _target = _targets[i];
+
+            require(
+                _target != address(0),
+                "Invalid Target address for Delegatecall"
+            );
+            require(
+                !authorizedAddresses[_target],
+                "Target address already authorized"
+            );
+        }
+
+        // Prepare the data for the Delay module to execute
+        bytes memory data = abi.encodeWithSelector(
+            this.confirmBatchAuthorization.selector,
+            _targets
+        );
+
+        // Queue a single authorization request in the Delay module
+        delayModule.execTransactionFromModule(
             address(this),
             0,
             data,
             Enum.Operation.Call
         );
-        
-        emit AuthorizationRequested(_target);
+
+        // Emit a single event for the batch request
+        emit BatchAuthorizationRequested(_targets);
     }
-    
+
     /**
-     * @dev Confirms a pending authorization after the timelock period has passed
-     * This function is called by the Delay module after the cooldown period
+     * @dev Confirms authorization for a target address
      * @param _target Address to be authorized
      */
-    function confirmAuthorization(address _target) external {
-        require(msg.sender == address(delay), "Only callable via Delay module");
+    function confirmAuthorization(address _target) external onlyDelayModule {
+        // Ensure this is called by the Delay module
+        require(
+            msg.sender == address(delayModule),
+            "Only callable via Delay module"
+        );
         authorizedAddresses[_target] = true;
+
+        // Emit an event for the authorization
         emit AddressAuthorized(_target);
     }
-    
+
     /**
-     * @dev Removes an address from the authorized list
-     * @param _target Address to be removed
+     * @dev Confirms authorization for multiple target addresses
+     * @param _targets Array of addresses to be authorized
      */
-    function removeAuthorization(address _target) internal {
-        require(authorizedAddresses[_target], "Address not authorized");
-        authorizedAddresses[_target] = false;
-        emit AddressAuthorizationRemoved(_target);
+    function confirmBatchAuthorization(
+        address[] calldata _targets
+    ) external onlyDelayModule {
+        for (uint256 i = 0; i < _targets.length; i++) {
+            address _target = _targets[i];
+            require(
+                !authorizedAddresses[_target],
+                "Address already authorized"
+            );
+
+            authorizedAddresses[_target] = true;
+        }
+
+        // Emit a single event for the batch confirmation
+        emit BatchAddressAuthorized(_targets);
     }
-    
+
+    /**
+     * @dev Requests removal of multiple addresses from the authorized list
+     * This will directly remove the addresses without queuing in the Delay module
+     * @param _targets Array of addresses to be removed
+     */
+    function requestBatchDeauthorization(
+        address[] calldata _targets
+    ) external onlyOwner {
+        // Validate the input addresses
+        for (uint256 i = 0; i < _targets.length; i++) {
+            address _target = _targets[i];
+
+            require(
+                _target != address(0),
+                "Invalid Target address for deauthorization"
+            );
+            require(
+                authorizedAddresses[_target],
+                "Target address not authorized"
+            );
+        }
+
+        // Directly remove the addresses
+        for (uint256 i = 0; i < _targets.length; i++) {
+            authorizedAddresses[_targets[i]] = false; // Remove the address
+        }
+
+        // Emit a single event for the batch request
+        emit BatchAddressRemoved(_targets);
+    }
+
     /**
      * @dev Provides the following functionalities:
      * - isAuthorized(address) -> returns true if the address is authorized for delegatecall
      * - requestAuthorization(address) -> requests authorization for a new address to be used with delegatecall, after the cooldown period.
      * - removeAuthorization(address) -> removes an address from the authorized list
-     * 
+     *
      * @param to Target address for the transaction
      * @param data Function selector (4 bytes) + address parameter (20 bytes). Total length must be 24 bytes.
-     * @param operation Operation type (0=call, 1=delegatecall). Only delegatecall operations are checked. 
+     * @param operation Operation type (0=call, 1=delegatecall). Only delegatecall operations are checked.
      * @notice Other parameters are not used by this guard but are required by the Safe interface
      */
     function checkTransaction(
@@ -182,70 +233,25 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
         address payable refundReceiver,
         bytes memory signatures,
         address msgSender
-    ) external override {
+    ) external override onlyOwner {
         if (operation == Enum.Operation.Call) {
+            // If the operation is a call, we don't need to check the target address
             return;
-        }
-        if (data.length >= 4) {
-            //data is packed with no pagging. check safe multisend
-            // slot 0  data.length 
-            // slot 1 : fn selector + target address
-            address _target; // to authorize or to verify
-            bytes4 functionSelector; // verify or authorize
-            require(data.length == 24, "Data length invalid"); // fnselector (4bytes) + address expected (20bytes)
-
-            // load encoded the 2 variables
-            assembly {
-                // slot 1  : addr 0x0  - 0x20 : data.length, ignored
-                // slot 2  : addr 0x20 - 0x40 : function selector + target address + padding
-                
-                // load slot 1 with fn selector + target address
-                let dataTmp := mload(add(data, 32))
-
-                // moves the fnSelector to the last 4 bytes (32 bits) (shift right 256 - 32 =  224 bits)
-                functionSelector := shr(224, dataTmp)  
-
-                // address starts at 0x24
-                let addrTmp:= mload(add(data, 0x24))
-                
-                // moves the address to the last 20 bytes (160 bits) (shift right 256 - 160 = 96 bits)
-                let addr := shr(96,addrTmp) 
-                _target := addr
-            }
-            // cast to bytes4
-            functionSelector = bytes4(functionSelector);
-            
-            if (functionSelector == isAuthorizedSelector) {
-                isAuthorized(_target);
-            } 
-            else if (functionSelector == requestAuthorizationSelector) {
-                // request authorization for the target address via the delay module
-                delay.execTransactionFromModule(
-                    address(this),
-                    0,
-                    abi.encodeWithSelector(this.confirmAuthorization.selector, _target),
-                    Enum.Operation.Call
-                );
-            }
-            else if (functionSelector == removeAuthorizationSelector) {
-                // remove authorization for the target address
-                removeAuthorization(_target);
-            }
-            else {
-                revert(string(abi.encodePacked(
-                    "Invalid function selector. Supported functions: ",
-                    "isAuthorized(address), ",
-                    "requestAuthorization(address), ",
-                    "removeAuthorization(address)"
-                )));
-            }
+        } else {
+            require(
+                authorizedAddresses[to],
+                "Target address not authorized for delegatecall"
+            );
         }
     }
-    
+
     /**
      * @dev Hook called after a transaction is executed
      */
-    function checkAfterExecution(bytes32 txHash, bool success) external override {
+    function checkAfterExecution(
+        bytes32 txHash,
+        bool success
+    ) external override {
         // No additional checks needed after execution
     }
 }

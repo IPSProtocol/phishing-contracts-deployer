@@ -5,7 +5,7 @@ pragma solidity ^0.8.6;
 library Enum {
     enum Operation {
         Call,
-        DelegateCall
+        Delegatecall
     }
 }
 
