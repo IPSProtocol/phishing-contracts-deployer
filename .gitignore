@@ -19,3 +19,5 @@ ignition/deployments/chain-31337
 doc.mf
 
 package-lock.json
+
+.DS_Store

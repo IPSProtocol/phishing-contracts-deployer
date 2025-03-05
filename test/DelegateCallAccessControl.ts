@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import hre from "hardhat";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { ethers } from "hardhat";
 
 describe("DelegateCallAccessControl", function () {
   // Test variables
@@ -30,43 +31,55 @@ describe("DelegateCallAccessControl", function () {
     // Deploy the Delay contract
     const DelayFactory = await hre.ethers.getContractFactory("Delay");
     delay = await DelayFactory.deploy(
-      owner.address,
-      mockSafe.target,
-      mockSafe.target,
-      cooldownPeriod,
-      expirationPeriod
+        owner.address,
+        mockSafe.address,
+        mockSafe.address,
+        cooldownPeriod,
+        expirationPeriod
     );
 
-    // Deploy the DelegateCallAccessControl contract
+    // Deploy the DelegateCallAccessControl contract with the mockSafe address as the owner
     const DelegateCallAccessControlFactory = await hre.ethers.getContractFactory("DelegateCallAccessControl");
     delegateCallAccessControl = await DelegateCallAccessControlFactory.deploy(
-      owner.address,
-      mockSafe.target,
-      mockSafe.target,
-      delay.target
+        mockSafe.address, // Set the owner to the mockSafe address
+        mockSafe.address,
+        mockSafe.address,
+        delay.address
     );
 
-    // Enable the DelegateCallAccessControl as a module on the Delay contract
-    await delay.enableModule(delegateCallAccessControl.target);
+    // Set the DelegateCallAccessControl as a guard on the mock Safe
+    await mockSafe.setGuard(delegateCallAccessControl.address);
   });
 
   describe("Authorization Management", function () {
-    it("Should allow owners to request authorization for a new address", async function () {
+    it("Should allow owners to request authorization for a new address through the mocked Safe", async function () {
       // Create mock signatures that would pass the Safe's checkSignatures
       const mockSignatures = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-      
-      // Request authorization
-      const tx = await delegateCallAccessControl.requestAuthorization(authorizedTarget.address, mockSignatures);
-      
+
+      // Build the data variable for the delegatecall
+      const data = ethers.utils.defaultAbiCoder.encode(
+          ["bytes4", "address"],
+          [delegateCallAccessControl.requestAuthorizationSelector, authorizedTarget.address]
+      );
+
+      // Request authorization through the mocked Safe
+      const tx = await mockSafe.execTransaction(
+          delegateCallAccessControl.address,
+          0,
+          data,
+          Enum.Operation.DelegateCall,
+          mockSignatures
+      );
+
       // Get the authorization hash
       const nonce = await mockSafe.nonce();
       const authHash = await delegateCallAccessControl.getAuthorizationHash(authorizedTarget.address, nonce);
-      
+
       // Check event emission
       await expect(tx)
-        .to.emit(delegateCallAccessControl, "AuthorizationRequested")
-        .withArgs(authorizedTarget.address, authHash);
-      
+          .to.emit(delegateCallAccessControl, "AuthorizationRequested")
+          .withArgs(authorizedTarget.address);
+
       // Check that the transaction was queued in the Delay module
       expect(await delay.queueNonce()).to.equal(1);
     });
@@ -93,7 +106,7 @@ describe("DelegateCallAccessControl", function () {
       const data = selector + authorizedTarget.address.slice(2).padStart(64, '0');
       
       await delay.executeNextTx(
-        delegateCallAccessControl.target,
+        delegateCallAccessControl.address,
         0,
         data,
         0 // Call operation
@@ -118,7 +131,7 @@ describe("DelegateCallAccessControl", function () {
       const data = selector + authorizedTarget.address.slice(2).padStart(64, '0');
       
       await delay.executeNextTx(
-        delegateCallAccessControl.target,
+        delegateCallAccessControl.address,
         0,
         data,
         0 // Call operation
@@ -137,7 +150,7 @@ describe("DelegateCallAccessControl", function () {
     });
   });
 
-  describe("Transaction Checking", function () {
+  describe("Is Authorized", function () {
     it("Should allow normal calls (operation 0) to any address", async function () {
       // Mock transaction parameters
       const to = unauthorizedTarget.address;
@@ -181,7 +194,7 @@ describe("DelegateCallAccessControl", function () {
       const data = selector + authorizedTarget.address.slice(2).padStart(64, '0');
       
       await delay.executeNextTx(
-        delegateCallAccessControl.target,
+        delegateCallAccessControl.address,
         0,
         data,
         0 // Call operation
@@ -200,53 +213,29 @@ describe("DelegateCallAccessControl", function () {
     });
   });
 
-  describe("Utility Functions", function () {
-    it("Should correctly return the list of authorized addresses", async function () {
+  describe("Confirming Authorization after cooldown period", function () {
+    it("Should allow confirming authorization after cooldown period via Delay", async function () {
       // Create mock signatures that would pass the Safe's checkSignatures
       const mockSignatures = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
       
-      // Request and confirm authorization for multiple addresses
+      // Request authorization
       await delegateCallAccessControl.requestAuthorization(authorizedTarget.address, mockSignatures);
       
-      // Increase time to pass the cooldown period
-      await time.increase(cooldownPeriod + 1);
       
       // Execute the transaction via the Delay module
       const selector = delegateCallAccessControl.interface.getFunction("confirmAuthorization").selector;
       const data = selector + authorizedTarget.address.slice(2).padStart(64, '0');
       
       await delay.executeNextTx(
-        delegateCallAccessControl.target,
+        delegateCallAccessControl.address,
         0,
         data,
         0 // Call operation
       );
       
-      // Request and confirm authorization for another address
-      await delegateCallAccessControl.requestAuthorization(owner.address, mockSignatures);
-      
-      // Increase time to pass the cooldown period
-      await time.increase(cooldownPeriod + 1);
-      
-      // Execute the transaction via the Delay module
-      const selector2 = delegateCallAccessControl.interface.getFunction("confirmAuthorization").selector;
-      const data2 = selector2 + owner.address.slice(2).padStart(64, '0');
-      
-      await delay.executeNextTx(
-        delegateCallAccessControl.target,
-        0,
-        data2,
-        0 // Call operation
-      );
-      
-      // Get authorized addresses
-      const authorizedAddresses = await delegateCallAccessControl.getAuthorizedAddresses();
-      
-      // Check the list
-      expect(authorizedAddresses).to.include(authorizedTarget.address);
-      expect(authorizedAddresses).to.include(owner.address);
-      expect(authorizedAddresses).to.not.include(unauthorizedTarget.address);
-      expect(authorizedAddresses.length).to.equal(2);
-    });
-  });
+      // Check authorization status
+      expect(await delegateCallAccessControl.authorizedAddresses(authorizedTarget.address)).to.be.true;
+    
+  })
+});
 }); 

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity ^0.8.6;
 
-import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
+import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
 import "@gnosis.pm/zodiac/contracts/core/Module.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
+import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Delay.sol";
 
 // Interface for the Safe contract to use its signature verification
@@ -52,14 +54,11 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
     // Mapping to store authorized addresses for delegatecall
     mapping(address => bool) public authorizedAddresses;
     
-    // Mapping to track used authorization hashes to prevent replay attacks
-    mapping(bytes32 => bool) public usedAuthorizationHashes;
-    
     // Events
     event DelayModuleSet(address indexed delayModule);
-    event AddressAuthorized(address indexed candidateDelegate);
-    event AddressAuthorizationRemoved(address indexed candidateDelegate);
-    event AuthorizationRequested(address indexed candidateDelegate);
+    event AddressAuthorized(address indexed _target);
+    event AddressAuthorizationRemoved(address indexed _target);
+    event AuthorizationRequested(address indexed _target);
     
     /**
      * @dev Constructor for direct deployment
@@ -111,26 +110,24 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
         emit DelayModuleSet(_delay);
     }
     
-    function isAuthorized(address candidateDelegate) internal view returns (bool) {
-        require(authorizedAddresses[candidateDelegate], "Address not authorized for delegatecall");
-        // return authorizedAddresses[candidateDelegate];
+    function isAuthorized(address _target) internal view returns (bool) {
+        require(authorizedAddresses[_target], "Address not authorized for delegatecall");
     }
+    
     /**
      * @dev Requests authorization for a new address to be used with delegatecall
      * This will queue the authorization request in the Delay module
-     * @param _targetAddress Address to be authorized
+     * @param _target Address to be authorized
      */
-    function requestAuthorization(address _targetAddress) internal {
-        require(_targetAddress != address(0), "Invalid address");
-        require(!authorizedAddresses[_targetAddress], "Address already authorized");
+    function requestAuthorization(address _target) internal {
+        require(_target != address(0), "Invalid address");
+        require(!authorizedAddresses[_target], "Address already authorized");
         
-        // Prepare the data for the authorization
         bytes memory data = abi.encodeWithSelector(
             this.confirmAuthorization.selector,
-            _targetAddress
+            _target
         );
         
-        // Queue the transaction in the Delay module
         delay.execTransactionFromModule(
             address(this),
             0,
@@ -138,33 +135,28 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
             Enum.Operation.Call
         );
         
-        emit AuthorizationRequested(_targetAddress);
+        emit AuthorizationRequested(_target);
     }
     
     /**
      * @dev Confirms a pending authorization after the timelock period has passed
      * This function is called by the Delay module after the cooldown period
-     * @param _targetAddress Address to be authorized
+     * @param _target Address to be authorized
      */
-    function confirmAuthorization(address _targetAddress) external {
-        // Only the Delay module can call this function
+    function confirmAuthorization(address _target) external {
         require(msg.sender == address(delay), "Only callable via Delay module");
-        
-        authorizedAddresses[_targetAddress] = true;
-        
-        emit AddressAuthorized(_targetAddress);
+        authorizedAddresses[_target] = true;
+        emit AddressAuthorized(_target);
     }
     
     /**
      * @dev Removes an address from the authorized list
-     * @param _targetAddress Address to be removed
+     * @param _target Address to be removed
      */
-    function removeAuthorization(address _targetAddress) internal {
-        require(authorizedAddresses[_targetAddress], "Address not authorized");
-        
-        authorizedAddresses[_targetAddress] = false;
-        
-        emit AddressAuthorizationRemoved(_targetAddress);
+    function removeAuthorization(address _target) internal {
+        require(authorizedAddresses[_target], "Address not authorized");
+        authorizedAddresses[_target] = false;
+        emit AddressAuthorizationRemoved(_target);
     }
     
     /**
@@ -173,18 +165,10 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
      * - requestAuthorization(address) -> requests authorization for a new address to be used with delegatecall, after the cooldown period.
      * - removeAuthorization(address) -> removes an address from the authorized list
      * 
-     * Only verifies the target address if the operation is delegatecall (1)
-     * @param to Destination address of Safe transaction
-     * @param value Ether value of Safe transaction
-     * @param data Data payload of Safe transaction
-     * @param operation Operation type of Safe transaction (0=call, 1=delegatecall)
-     * @param safeTxGas Gas that should be used for the Safe transaction
-     * @param baseGas Gas costs for data used to trigger the safe transaction
-     * @param gasPrice Maximum gas price that should be used for this transaction
-     * @param gasToken Token address (or 0 if ETH) that is used for the payment
-     * @param refundReceiver Address of receiver of gas payment (or 0 if tx.origin)
-     * @param signatures Signature data that should be verified
-     * @param msgSender Address of the sender of the current call
+     * @param to Target address for the transaction
+     * @param data Function selector (4 bytes) + address parameter (20 bytes). Total length must be 24 bytes.
+     * @param operation Operation type (0=call, 1=delegatecall). Only delegatecall operations are checked. 
+     * @notice Other parameters are not used by this guard but are required by the Safe interface
      */
     function checkTransaction(
         address to,
@@ -206,48 +190,54 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
             //data is packed with no pagging. check safe multisend
             // slot 0  data.length 
             // slot 1 : fn selector + target address
-            address candidateDelegate; // to authorize or to verify
+            address _target; // to authorize or to verify
             bytes4 functionSelector; // verify or authorize
             require(data.length == 24, "Data length invalid"); // fnselector (4bytes) + address expected (20bytes)
 
             // load encoded the 2 variables
             assembly {
                 // slot 1  : addr 0x0  - 0x20 : data.length, ignored
-                // slot 2  : addr 0x20 - 0x40 : function selector + candidateDelegate address + padding
+                // slot 2  : addr 0x20 - 0x40 : function selector + target address + padding
                 
-                // load slot 1 with fn selector + candidateDelegate address
+                // load slot 1 with fn selector + target address
                 let dataTmp := mload(add(data, 32))
 
                 // moves the fnSelector to the last 4 bytes (32 bits) (shift right 256 - 32 =  224 bits)
-                functionSelector := shr(224, _data)  
+                functionSelector := shr(224, dataTmp)  
 
                 // address starts at 0x24
                 let addrTmp:= mload(add(data, 0x24))
                 
                 // moves the address to the last 20 bytes (160 bits) (shift right 256 - 160 = 96 bits)
                 let addr := shr(96,addrTmp) 
+                _target := addr
             }
             // cast to bytes4
             functionSelector = bytes4(functionSelector);
             
             if (functionSelector == isAuthorizedSelector) {
-                isAuthorized(candidateDelegate);
+                isAuthorized(_target);
             } 
             else if (functionSelector == requestAuthorizationSelector) {
-            
+                // request authorization for the target address via the delay module
                 delay.execTransactionFromModule(
                     address(this),
                     0,
-                    abi.encodeWithSelector(this.confirmAuthorization.selector, candidateDelegate),
+                    abi.encodeWithSelector(this.confirmAuthorization.selector, _target),
                     Enum.Operation.Call
                 );
             }
             else if (functionSelector == removeAuthorizationSelector) {
-                
-                removeAuthorization(candidateDelegate);
+                // remove authorization for the target address
+                removeAuthorization(_target);
             }
-            else{
-                revert("Invalid functionality");
+            else {
+                revert(string(abi.encodePacked(
+                    "Invalid function selector. Supported functions: ",
+                    "isAuthorized(address), ",
+                    "requestAuthorization(address), ",
+                    "removeAuthorization(address)"
+                )));
             }
         }
     }
@@ -257,37 +247,5 @@ contract DelegateCallAccessControl is BaseGuard, Module, ReentrancyGuard {
      */
     function checkAfterExecution(bytes32 txHash, bool success) external override {
         // No additional checks needed after execution
-    }
-    
-    /**
-     * @dev Returns the list of all authorized addresses
-     * @return Array of authorized addresses
-     */
-    function getAuthorizedAddresses() external view returns (address[] memory) {
-        // Count authorized addresses
-        uint256 count = 0;
-        for (uint256 i = 0; i < 2**160; i++) {
-            address addr = address(uint160(i));
-            if (authorizedAddresses[addr]) {
-                count++;
-            }
-            // Break after finding all authorized addresses or reaching a reasonable limit
-            if (i >= 1000 || count >= 1000) break;
-        }
-        
-        // Create and populate the array
-        address[] memory result = new address[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < 2**160; i++) {
-            address addr = address(uint160(i));
-            if (authorizedAddresses[addr]) {
-                result[index] = addr;
-                index++;
-            }
-            // Break after finding all authorized addresses or reaching a reasonable limit
-            if (i >= 1000 || index >= count) break;
-        }
-        
-        return result;
     }
 }
