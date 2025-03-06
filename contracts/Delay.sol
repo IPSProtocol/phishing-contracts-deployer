@@ -77,7 +77,6 @@ contract Delay is Modifier {
         target = _target;
         txExpiration = _expiration;
         txCooldown = _cooldown;
-        setupModules();
 
         emit DelaySetup(msg.sender, _owner, _avatar, _target);
         emit AvatarSet(address(0), _avatar);

@@ -33,11 +33,11 @@ interface ISafe {
 }
 
 /**
- * @title DelegatecallAccessControl
+ * @title DelegatecallGuard
  * @dev A Zodiac guard module that protects delegatecall operations by verifying the candidateDelegate address
  * is in an authorized list. Uses the Delay module for timelock functionality.
  */
-contract DelegatecallAccessControl is BaseGuard, FactoryFriendly {
+contract DelegatecallGuardDelegatecallGuard is BaseGuard, FactoryFriendly {
     // Constants
     uint256 public constant DELEGATECALL_OPERATION = 1;
 
@@ -48,7 +48,7 @@ contract DelegatecallAccessControl is BaseGuard, FactoryFriendly {
     mapping(address => bool) public authorizedAddresses;
 
     // Events
-    event DelegatecallAccessControlSetup(address _owner, address delayModule);
+    event DelegatecallGuardSetup(address _owner, address delayModule);
     event AddressAuthorized(address _target);
     event BatchAuthorizationRequested(address[] _targets);
     event BatchDeAuthorizationRequested(address[] _targets);
@@ -88,7 +88,7 @@ contract DelegatecallAccessControl is BaseGuard, FactoryFriendly {
 
         transferOwnership(_owner);
 
-        emit DelegatecallAccessControlSetup(_owner, _delayModule);
+        emit DelegatecallGuardSetup(_owner, _delayModule);
     }
 
     modifier onlyDelayModule() {

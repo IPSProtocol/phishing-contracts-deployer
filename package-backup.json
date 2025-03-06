@@ -1,0 +1,24 @@
+{
+  "name": "zodiac_delegatecall_controlaccess",
+  "version": "1.0.0",
+  "description": "Zodiac DelegateCall Control Access Module is an **Advanced Transaction Guard** for Safe Wallets, designed to add additional security layers such as adding **delegated call restrictions** via an authorized list of addresses, as well as ensuring secure management of those lists.",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.17.0"
+  },
+  "dependencies": {
+    "ethers": "^6.7.0",
+    "@openzeppelin/contracts": "^4.9.0",
+    "@gnosis.pm/zodiac": "^4.0.3",
+    "@gnosis.pm/safe-core-sdk": "^3.2.0",
+    "@gnosis.pm/safe-contracts": "1.5.0"
+  }
+}
+  

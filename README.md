@@ -1,8 +1,8 @@
-# DelegateCall Control Access Module
+# DelegateCall Guard
 
 ## Overview
 
-The **DelegateCall Control Access Module** is a **Zodiac Guard** designed to protect Safe Wallets from using `delegatecall` with untrusted contract address. 
+The **DelegateCall Guard** is a **Custom Zodiac Guard** designed to protect Safe Wallets from using `delegatecall` with untrusted contract address. 
 
 __Performing a delegatecall to an untrusted contract is the smart contract equivalent of granting admin permissions to a sketchy .exe file downloaded from a torrent, running it directly on your machine, and hoping it’s not malware.__
 

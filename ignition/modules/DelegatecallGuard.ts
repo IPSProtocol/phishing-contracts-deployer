@@ -7,7 +7,7 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 const DEFAULT_COOLDOWN_PERIOD = 86400;
 const DEFAULT_EXPIRATION_PERIOD = 0; // 0 means no expiration
 
-const DelegateCallAccessControlModule = buildModule("DelegateCallAccessControlModule", (m) => {
+const DelegatecallGuardModule = buildModule("DelegatecallGuardModule", (m) => {
   // Get deployment parameters with defaults
   const owner = m.getParameter("owner");
   const avatar = m.getParameter("avatar");
@@ -24,8 +24,8 @@ const DelegateCallAccessControlModule = buildModule("DelegateCallAccessControlMo
     expirationPeriod
   ]);
 
-  // Deploy the DelegateCallAccessControl contract
-  const delegateCallAccessControl = m.contract("DelegateCallAccessControl", [
+  // Deploy the DelegatecallGuard contract
+  const delegateCallAccessControl = m.contract("DelegatecallGuard", [
     owner,
     avatar,
     target,
@@ -35,4 +35,4 @@ const DelegateCallAccessControlModule = buildModule("DelegateCallAccessControlMo
   return { delay, delegateCallAccessControl };
 });
 
-export default DelegateCallAccessControlModule; 
+export default DelegatecallGuardModule; 
