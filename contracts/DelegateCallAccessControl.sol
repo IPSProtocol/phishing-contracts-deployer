@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity ^0.8.6;
 
-import "@gnosis.pm/zodiac/contracts/core/Module.sol";
 import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
 import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Delay.sol";
 import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
 
@@ -39,7 +37,7 @@ interface ISafe {
  * @dev A Zodiac guard module that protects delegatecall operations by verifying the candidateDelegate address
  * is in an authorized list. Uses the Delay module for timelock functionality.
  */
-contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
+contract DelegatecallAccessControl is BaseGuard, FactoryFriendly {
     // Constants
     uint256 public constant DELEGATECALL_OPERATION = 1;
 
@@ -50,12 +48,12 @@ contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
     mapping(address => bool) public authorizedAddresses;
 
     // Events
-    event DelayModuleSet(address indexed delayModule);
-    event AddressAuthorized(address indexed _target);
-    event BatchAuthorizationRequested(address[] indexed _targets);
-    event BatchDeAuthorizationRequested(address[] indexed _targets);
-    event BatchAddressAuthorized(address[] indexed targets);
-    event BatchAddressRemoved(address[] indexed targets);
+    event DelegatecallAccessControlSetup(address _owner, address delayModule);
+    event AddressAuthorized(address _target);
+    event BatchAuthorizationRequested(address[] _targets);
+    event BatchDeAuthorizationRequested(address[] _targets);
+    event BatchAddressAuthorized(address[] targets);
+    event BatchAddressRemoved(address[] targets);
 
     /**
      * @dev Constructor for direct deployment, anyone can deploy this module but set _owner to the Safe address
@@ -67,10 +65,8 @@ contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
             _delayModule != address(0),
             "Delay module cannot be zero address"
         );
-        delayModule = Delay(_delayModule);
-        transferOwnership(_owner);
-
-        emit DelayModuleSet(address(delayModule));
+        bytes memory initializeParams = abi.encode(_owner, _delayModule);
+        setUp(initializeParams);
     }
 
     /**
@@ -78,6 +74,7 @@ contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
      * @param initializeParams Parameters of initialization encoded
      */
     function setUp(bytes memory initializeParams) public override initializer {
+        __Ownable_init();
         (address _owner, address _delayModule) = abi.decode(
             initializeParams,
             (address, address)
@@ -91,7 +88,7 @@ contract DelegatecallAccessControl is BaseGuard, Module, ReentrancyGuard {
 
         transferOwnership(_owner);
 
-        emit DelayModuleSet(_delayModule);
+        emit DelegatecallAccessControlSetup(_owner, _delayModule);
     }
 
     modifier onlyDelayModule() {
