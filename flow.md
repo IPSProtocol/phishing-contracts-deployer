@@ -9,11 +9,11 @@ sequenceDiagram
     %% Authorization Flow
     rect rgb(255, 255, 255)
         Note over Safe,Delay: Authorization Process
-        User->>+Safe: requestAuthorization(targetAddress)
-        Safe->>+DelegateCallAccessControl: requestAuthorization(targetAddress)
-        DelegateCallAccessControl->>+Delay: execTransactionFromModule(confirmAuthorization)
+        User->>+Safe: requestBatchAuthorization(targetAddresses)
+        Safe->>+DelegateCallAccessControl: requestBatchAuthorization(targetAddresses)
+        DelegateCallAccessControl->>+Delay: execTransactionFromModule(confirmBatchAuthorization)
         Note right of Delay: Cooldown period
-        Delay->>-DelegateCallAccessControl: confirmAuthorization(targetAddress)
+        Delay->>-DelegateCallAccessControl: confirmBatchAuthorization(targetAddresses)
         DelegateCallAccessControl->>DelegateCallAccessControl: Set authorizedAddresses[target] = true
         DelegateCallAccessControl->>-Safe: Return
         Safe->>-User: Return
@@ -45,4 +45,14 @@ sequenceDiagram
             DelegateCallAccessControl->>-Safe: Return
         end
         Safe->>-User: Return success
+    end
+
+    %% Deauthorization Flow
+    rect rgb(255, 255, 255)
+        Note over Safe,Delay: Deauthorization Process
+        User->>+Safe: requestBatchDeauthorization(targetAddresses)
+        Safe->>+DelegateCallAccessControl: requestBatchDeauthorization(targetAddresses)
+        DelegateCallAccessControl->>DelegateCallAccessControl: Set authorizedAddresses[target] = false
+        DelegateCallAccessControl->>-Safe: Return
+        Safe->>-User: Return
     end
