@@ -1,17 +1,38 @@
 {
   "compilerOptions": {
-      "declaration": true,
-      "esModuleInterop": true,
-      "module": "commonjs",
-      "moduleResolution": "node",
-      "noEmit": true,
-      "resolveJsonModule": true,
-      "skipLibCheck": true,
-      "strict": true,
-      "target": "es2020",
+      "target": "es2022",                     // Modern target for ESM & better performance
+      "module": "commonjs",                    // Compatible with Node.js (Hardhat plugins expect this)
+      "moduleResolution": "node",              // Use Node resolution algorithm
+      "resolveJsonModule": true,                // Allow importing JSON files
+      "esModuleInterop": true,                   // Helps with default import compatibility (ethers, chai, etc.)
+      "forceConsistentCasingInFileNames": true,  // Avoid case-sensitive import issues (good for cross-OS projects)
+      "strict": true,                            // Full strict mode for best type safety
+      "skipLibCheck": true,                      // Skip type checks in `node_modules` (faster)
+      "noEmit": true,                            // Don't generate JS files (Hardhat handles execution)
+      "declaration": true,                       // Emit `.d.ts` for external consumption (can disable if internal)
       "typeRoots": [
-          "node_modules/@types",
-          "typings"
-      ]
-  }
+          "node_modules/@types",                 // Default types
+          "typings"                              // Custom type definitions (optional folder for overrides)
+      ],
+      "lib": ["es2022", "dom"],                   // Support modern ES and DOM (optional if using browser tools in scripts)
+      "allowSyntheticDefaultImports": true,       // Safer import for CommonJS packages
+      "strictNullChecks": true,                   // Enforce null safety
+      "strictFunctionTypes": true,                 // Safer callback function signatures
+      "strictPropertyInitialization": true,        // Ensure class properties are initialized
+      "noUnusedLocals": true,                     // Warn on unused variables
+      "noUnusedParameters": true,                 // Warn on unused function parameters
+      "noImplicitReturns": true,                   // Ensure all code paths return a value
+      "noFallthroughCasesInSwitch": true           // Safer switch handling
+  },
+  "include": [
+      "contracts/**/*.ts",                        // Include all your contracts-related files
+      "test/**/*.ts",                             // Include all test files
+      "scripts/**/*.ts",                          // Include any deploy/utility scripts
+      "hardhat.config.ts"                         // Include Hardhat config itself (sometimes missed)
+  ],
+  "exclude": [
+      "node_modules",                            // Ignore dependencies
+      "artifacts",                               // Ignore Hardhat build outputs
+      "cache"                                    // Ignore Hardhat cache
+  ]
 }

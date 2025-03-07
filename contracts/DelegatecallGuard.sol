@@ -3,7 +3,7 @@ pragma solidity 0.8.20;
 
 import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
 import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
-import "./Delay.sol";
+import "./external/Delay.sol";
 import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
 
 // Interface for the Safe contract to use its signature verification

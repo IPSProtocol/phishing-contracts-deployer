@@ -31,17 +31,9 @@ jobs:
         run: yarn install --immutable
 
       - name: Compile Contracts
-        run: yarn prepare
+        run: yarn compile
 
       - name: Run Tests
         run: yarn test
 
-      - name: Run Coverage
-        run: yarn coverage
-
-      - name: Upload Coverage to Coveralls
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: coverage/lcov.info
-
+  

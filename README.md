@@ -1,5 +1,8 @@
 # DelegateCall Guard
 
+[![Build Status](https://github.com/theexoticman/zodiac-delegatecall-guard/actions/workflows/ci.yaml/badge.svg)](https://github.com/theexoticman/zodiac-delegatecall-guard/actions/workflows/ci.yaml/)
+
+
 ## Overview
 
 The **DelegateCall Guard** is a **Custom Zodiac Guard** designed to protect Safe Wallets from using `delegatecall` with untrusted contract address. 
@@ -59,7 +62,11 @@ Because delegatecalls pose significantly higher risks, this module focuses on se
 npm install
 
 # Compile contracts
-npx hardhat compile
+yarn compile
 
 # Run tests
-npx hardhat test
+yarn test
+```
+
+# Security and Liability
+All contracts are WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

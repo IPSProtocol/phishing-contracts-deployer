@@ -4,6 +4,7 @@ import "hardhat-deploy";
 import type { HttpNetworkUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-waffle";
+import "solidity-coverage";
 
 const config: HardhatUserConfig = {
   paths: {
@@ -33,9 +34,7 @@ const config: HardhatUserConfig = {
       }
     }
   },
-  paths: {
-    sources: "./contracts",
-  }
+  
 };
 
 export default config;
