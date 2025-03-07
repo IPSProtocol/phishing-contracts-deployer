@@ -14,26 +14,24 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: 'npm'
 
       - name: Cache Hardhat & Node Modules
         uses: actions/cache@v3
         with:
           path: |
             node_modules
-            .yarn/cache
-            .yarn/install-state.gz
             cache
             artifacts
-          key: ${{ runner.os }}-node${{ matrix.node }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          key: ${{ runner.os }}-node20-npm-${{ hashFiles('package-lock.json') }}
 
       - name: Install Dependencies
-        run: yarn install --immutable
+        run: npm install
 
       - name: Compile Contracts
-        run: yarn compile
+        run: npx hardhat compile
 
       - name: Run Tests
-        run: yarn test
+        run: npm test
 
-  
+    
