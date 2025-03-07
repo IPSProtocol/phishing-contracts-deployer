@@ -64,12 +64,12 @@ describe("delegatecallGuard Integration Tests", function () {
         );
         await delegatecallGuard.deployed();
 
-        //enable the GuardModule on the Delay
+        //enable the Guard on the DelayModule
         // Enable the module after deployment
         const moduleAddress = delegatecallGuard.address; // Replace with the actual module address
         const enableModuleData = avatar.interface.encodeFunctionData("enableModule", [moduleAddress]);
 
-        // Call execTransaction from the owner to set the guard
+        // Call execTransaction from the itself to set the guard
         const tx = await callExecTransaction(avatar, delayModule, enableModuleData);
 
         expect(await delayModule.isModuleEnabled(delegatecallGuard.address)).to.equal(true);
@@ -77,8 +77,8 @@ describe("delegatecallGuard Integration Tests", function () {
         const setGuardData = avatar.interface.encodeFunctionData("setGuard", [delegatecallGuard.address]);
 
         // Call execTransaction from the owner to set the guard
-        const t = await callExecTransaction(avatar, avatar, setGuardData);
-        // retrieveLogs(t)
+        await callExecTransaction(avatar, avatar, setGuardData);
+        
         // expect the guard address to be set correctly.
         expect(await avatar.getGuardAddress()).to.equal(delegatecallGuard.address);
 
@@ -134,7 +134,7 @@ describe("delegatecallGuard Integration Tests", function () {
         };
     });
 
-    // Get signers once before all tests (good for cases where you want the same addresses across all tests)
+    // Get signers once before all tests
     before(async () => {
         [user1, user2] = await ethers.getSigners();
     });
@@ -178,7 +178,7 @@ describe("delegatecallGuard Integration Tests", function () {
         });
 
         it("should deauthorize addresses immediately after owner consensus", async function () {
-            const { avatar, delayModule, delegatecallGuard } = await deploySetupAndAuthorize();
+            const { avatar, delegatecallGuard } = await deploySetupAndAuthorize();
 
             const authorizedTargets = [user1.address, user2.address];
 
@@ -197,7 +197,7 @@ describe("delegatecallGuard Integration Tests", function () {
         });
 
         it("should revert on delegatecall to unauthorized address", async function () {
-            const { avatar, delegatecallGuard, dummy } = await deployContractsAndSetupModuleAndGuard();
+            const { avatar, dummy } = await deployContractsAndSetupModuleAndGuard();
             const unauthorizedAddress = dummy.address;
             const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
 
@@ -218,7 +218,7 @@ describe("delegatecallGuard Integration Tests", function () {
         });
 
         it("should allow regular calls to unauthorized addresses", async function () {
-            const { avatar, delegatecallGuard, dummy } = await deployContractsAndSetupModuleAndGuard();
+            const { avatar, dummy } = await deployContractsAndSetupModuleAndGuard();
             const unauthorizedAddress = dummy.address;
             const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
 
@@ -237,7 +237,7 @@ describe("delegatecallGuard Integration Tests", function () {
         });
 
         it("should allow delegatecall after authorization", async function () {
-            const { delegatecallGuard, avatar, delayModule, dummy } = await deploySetupAndAuthorize();
+            const { avatar, dummy } = await deploySetupAndAuthorize();
             const authorizedAddress = dummy.address;
 
             const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
