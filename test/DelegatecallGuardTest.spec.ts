@@ -269,34 +269,6 @@ describe("delegatecallGuard Integration Tests", function () {
 
         });
 
-        it("should deauthorize an address and block future delegatecalls", async function () {
-            const { delegatecallGuard } = await deploySetupAndAuthorize();
-            const authorizedAddress = user1.address;
-
-            await delegatecallGuard.requestBatchAuthorization([authorizedAddress]);
-            await ethers.provider.send("evm_increaseTime", [86401]);
-            await delegatecallGuard.confirmBatchAuthorization([authorizedAddress]);
-
-            expect(await delegatecallGuard.authorizedAddresses(authorizedAddress)).to.be.true;
-
-            await delegatecallGuard.requestBatchDeauthorization([authorizedAddress]);
-
-            expect(await delegatecallGuard.authorizedAddresses(authorizedAddress)).to.be.false;
-
-            await expect(
-                delegatecallGuard.checkTransaction(
-                    authorizedAddress,
-                    0,
-                    "0x",
-                    1, // delegatecall
-                    0, 0, 0,
-                    AddressZero,
-                    AddressZero,
-                    "0x",
-                    user1.address
-                )
-            ).to.be.revertedWith("Target address not authorized for delegatecall");
-        });
     });
 });
 

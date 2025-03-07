@@ -46,7 +46,7 @@ export default {
     sources: "contracts",
   },
   solidity: {
-    compilers: [{ version: "0.8.9" }],
+    compilers: [{ version: "0.8.20" }],
   },
   networks: {
     mainnet: {

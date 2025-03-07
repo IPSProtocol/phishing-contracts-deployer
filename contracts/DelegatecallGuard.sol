@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.6;
+pragma solidity 0.8.20;
 
 import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
 import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
@@ -74,11 +74,11 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      * @param initializeParams Parameters of initialization encoded
      */
     function setUp(bytes memory initializeParams) public override initializer {
-        __Ownable_init();
         (address _owner, address _delayModule) = abi.decode(
             initializeParams,
             (address, address)
         );
+        __Ownable_init(_owner);
 
         require(
             _delayModule != address(0),
@@ -86,7 +86,6 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
         );
         delayModule = Delay(_delayModule);
 
-        transferOwnership(_owner);
 
         emit DelegatecallGuardSetup(_owner, _delayModule);
     }
