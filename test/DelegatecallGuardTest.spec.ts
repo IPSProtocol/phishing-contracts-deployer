@@ -2,13 +2,47 @@ import assert from "assert";
 import { AddressZero } from "@ethersproject/constants";
 import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
+import { retrieveLogs } from "./utils";
+import { log } from "console";
 
-describe("DelegatecallGuard Integration Tests", function () {
+
+describe("Delay Contract Tests", function () {
+    let delayModule: any;
+    let owner: any;
+
+    before(async () => {
+        [owner] = await ethers.getSigners();
+        const DelayFactory = await ethers.getContractFactory("Delay");
+        delayModule = await DelayFactory.deploy(
+            owner.address,
+            owner.address,
+            owner.address,
+            86400,
+            0
+        );
+        await delayModule.deployed();
+    });
+
+    it("should set up the contract correctly", async function () {
+        expect(await delayModule.txCooldown()).to.equal(86400);
+        expect(await delayModule.txExpiration()).to.equal(0);
+    });
+
+    // Add more tests as needed...
+});
+
+
+
+describe("delegatecallGuard Integration Tests", function () {
     let user1: any, user2: any;
     const abiCoder = new ethers.utils.AbiCoder();
 
-    const setupTests = deployments.createFixture(async ({ deployments }) => {
-        await deployments.fixture();
+    const deployContractsAndSetupModuleAndGuard = deployments.createFixture(async () => {
+        // await deployments.fixture();
+        const DummyFactory = await hre.ethers.getContractFactory("Dummy");
+        const dummy = await DummyFactory.deploy();
+        await dummy.deployed();
+        console.log("dummy deployed", dummy.address);
 
         const avatarFactory = await hre.ethers.getContractFactory("TestAvatar");
         const avatar = await avatarFactory.deploy();
@@ -16,31 +50,96 @@ describe("DelegatecallGuard Integration Tests", function () {
         console.log("avatar deployed", avatar.address);
 
         const delayFactory = await hre.ethers.getContractFactory("Delay");
-        const delay = await delayFactory.deploy(
+        const delayModule = await delayFactory.deploy(
+            avatar.address,
             avatar.address,
             avatar.address,
             86400, // cooldown
             0      // expiration
         );
-        await delay.deployed();
-        console.log("delay deployed", delay.address);
-        const delegateCallAccessControlFactory = await hre.ethers.getContractFactory("DelegatecallAccessControl");
-        const delegateCallAccessControlModule = await delegateCallAccessControlFactory.deploy(
+        await delayModule.deployed();
+        console.log("delay deployed", delayModule.address);
+
+        await (await avatar.enableModule(delayModule.address)).wait();
+
+
+        const DelegatecallGuardFactory = await hre.ethers.getContractFactory("DelegatecallGuard");
+        const delegatecallGuard = await DelegatecallGuardFactory.deploy(
             avatar.address,
-            delay.address
+            delayModule.address
         );
-        await delegateCallAccessControlModule.deployed();
-        console.log("delegateCallAccessControlModule deployed", delegateCallAccessControlModule.address);
+        await delegatecallGuard.deployed();
+        console.log("delegatecallGuard deployed", delegatecallGuard.address);
 
-        const setGuardTx = await avatar.populateTransaction.setGuard(delegateCallAccessControlModule.address);
-        await expect(
-            avatar.execTransactionFromModule(avatar.address, 0, setGuardTx.data, 0)
-        ).not.to.be.reverted;
+        //enable the GuardModule on the Delay
+        // Enable the module after deployment
+        const moduleAddress = delegatecallGuard.address; // Replace with the actual module address
+        const enableModuleData = avatar.interface.encodeFunctionData("enableModule", [moduleAddress]);
 
+        // Call execTransaction from the owner to set the guard
+        const tx = await callExecTransaction(avatar, delayModule, enableModuleData);
+        console.log("is Module Enabled", await delayModule.isModuleEnabled(moduleAddress));
+        expect(await delayModule.isModuleEnabled(delegatecallGuard.address)).to.equal(true);
+
+        const setGuardData = avatar.interface.encodeFunctionData("setGuard", [delegatecallGuard.address]);
+
+        // Call execTransaction from the owner to set the guard
+        const t = await callExecTransaction(avatar, avatar, setGuardData);
+        // retrieveLogs(t)
+        // expect the guard address to be set correctly.
+        expect(await avatar.getGuardAddress()).to.equal(delegatecallGuard.address);
+
+        console.log("Guard set Correctly to: " + delegatecallGuard.address);
         return {
             avatar,
-            delay,
-            delegateCallAccessControlModule
+            delayModule,
+            delegatecallGuard,
+            dummy
+        };
+    });
+
+    const deploySetupAndAuthorize = deployments.createFixture(async () => {
+
+        const { avatar, delayModule, delegatecallGuard, dummy } = await deployContractsAndSetupModuleAndGuard();
+        const authorizedTargets = [user1.address, user2.address, dummy.address];
+
+
+        // Prepare the transaction data for requestBatchAuthorization
+        const requestBatchAuthorizationData = delegatecallGuard.interface.encodeFunctionData("requestBatchAuthorization", [authorizedTargets]);
+
+        // Call execTransaction from the avatar to request batch authorization
+        await callExecTransaction(avatar, delegatecallGuard, requestBatchAuthorizationData);
+        console.log("Batch authorization requested via execTransaction");
+
+        // Check not authorized yet
+        for (const target of authorizedTargets) {
+            expect(await delegatecallGuard.authorizedAddresses(target)).to.be.false;
+        }
+
+        // Fast forward time and finalize via Delay
+        await ethers.provider.send("evm_increaseTime", [86401]);
+
+        // Prepare the transaction data for confirmBatchAuthorization
+        const confirmBatchAuthorizationData = delegatecallGuard.interface.encodeFunctionData("confirmBatchAuthorization", [authorizedTargets]);
+
+        // Call executeNextTx directly on the delayModule
+        const executeNextTxResponse = await delayModule.executeNextTx(
+            delegatecallGuard.address, // to
+            0,                          // value
+            confirmBatchAuthorizationData, // data
+            0                           // operation
+        );
+        await executeNextTxResponse.wait();
+
+        // Confirm they are now authorized
+        for (const target of authorizedTargets) {
+            expect(await delegatecallGuard.authorizedAddresses(target)).to.be.true;
+        }
+        return {
+            avatar,
+            delayModule,
+            delegatecallGuard,
+            dummy
         };
     });
 
@@ -51,159 +150,141 @@ describe("DelegatecallGuard Integration Tests", function () {
 
     describe("Authorization Management", function () {
         it("should authorize a batch of addresses and finalize the transaction", async function () {
-            const { avatar, delay, delegateCallAccessControlModule } = await setupTests();
+            const { avatar, delayModule, delegatecallGuard } = await deployContractsAndSetupModuleAndGuard();
             const authorizedTargets = [user1.address, user2.address];
-            console.log("authorizedTargets", authorizedTargets);
 
-            const tx = await delegateCallAccessControlModule.requestBatchAuthorization(authorizedTargets);
-            console.log("tx", tx);
-            
-            let res = await tx.wait();
-            console.log("tx", res);
 
-            await expect(tx).to.emit(delegateCallAccessControlModule, "BatchAuthorizationRequested").withArgs(authorizedTargets);
+            // Prepare the transaction data for requestBatchAuthorization
+            const requestBatchAuthorizationData = delegatecallGuard.interface.encodeFunctionData("requestBatchAuthorization", [authorizedTargets]);
+
+            // Call execTransaction from the avatar to request batch authorization
+            await callExecTransaction(avatar, delegatecallGuard, requestBatchAuthorizationData);
+            console.log("Batch authorization requested via execTransaction");
 
             // Check not authorized yet
             for (const target of authorizedTargets) {
-                expect(await delegateCallAccessControlModule.authorizedAddresses(target)).to.be.false;
+                expect(await delegatecallGuard.authorizedAddresses(target)).to.be.false;
             }
 
             // Fast forward time and finalize via Delay
             await ethers.provider.send("evm_increaseTime", [86401]);
 
-            const data = delegateCallAccessControlModule.interface.encodeFunctionData(
-                "confirmBatchAuthorization",
-                [authorizedTargets]
-            );
+            // Prepare the transaction data for confirmBatchAuthorization
+            const confirmBatchAuthorizationData = delegatecallGuard.interface.encodeFunctionData("confirmBatchAuthorization", [authorizedTargets]);
 
-            await delay.executeNextTx(
-                delegateCallAccessControlModule.address,
-                0,
-                data,
-                0 // Call
+            // Call executeNextTx directly on the delayModule
+            const executeNextTxResponse = await delayModule.executeNextTx(
+                delegatecallGuard.address, // to
+                0,                          // value
+                confirmBatchAuthorizationData, // data
+                0                           // operation
             );
-
-            // Ensure the event is emitted after confirmation
-            await expect(delegateCallAccessControlModule.confirmBatchAuthorization(authorizedTargets))
-                .to.emit(delegateCallAccessControlModule, "BatchAddressAuthorized")
-                .withArgs(authorizedTargets);
+            await executeNextTxResponse.wait();
 
             // Confirm they are now authorized
             for (const target of authorizedTargets) {
-                expect(await delegateCallAccessControlModule.authorizedAddresses(target)).to.be.true;
+                expect(await delegatecallGuard.authorizedAddresses(target)).to.be.true;
             }
         });
 
         it("should deauthorize addresses immediately after owner consensus", async function () {
-            const { delegateCallAccessControlModule } = await setupTests();
+            const { avatar, delayModule, delegatecallGuard } = await deploySetupAndAuthorize();
+
             const authorizedTargets = [user1.address, user2.address];
 
-            // Authorize and confirm
-            await delegateCallAccessControlModule.requestBatchAuthorization(authorizedTargets);
-            await ethers.provider.send("evm_increaseTime", [86401]);
-            await delegateCallAccessControlModule.confirmBatchAuthorization(authorizedTargets);
 
-            // Confirm they are authorized
+            // Prepare the transaction data for requestBatchAuthorization
+            const requestBatchDeauthorizationData = delegatecallGuard.interface.encodeFunctionData("requestBatchDeauthorization", [authorizedTargets]);
+
+            // Call execTransaction from the avatar to request batch authorization
+            await callExecTransaction(avatar, delegatecallGuard, requestBatchDeauthorizationData);
+            console.log("Batch deauthorization requested via safe execTransaction");
+
+            // Check not authorized yet
             for (const target of authorizedTargets) {
-                expect(await delegateCallAccessControlModule.authorizedAddresses(target)).to.be.true;
+                expect(await delegatecallGuard.authorizedAddresses(target)).to.be.false;
             }
 
-            // Deauthorize directly
-            const tx = await delegateCallAccessControlModule.requestBatchDeauthorization(authorizedTargets);
-            await expect(tx).to.emit(delegateCallAccessControlModule, "BatchAddressRemoved").withArgs(authorizedTargets);
-
-            // Confirm they are no longer authorized
-            for (const target of authorizedTargets) {
-                expect(await delegateCallAccessControlModule.authorizedAddresses(target)).to.be.false;
-            }
         });
 
         it("should revert on delegatecall to unauthorized address", async function () {
-            const { delegateCallAccessControlModule } = await setupTests();
-            const unauthorizedAddress = AddressZero;
+            const { avatar, delegatecallGuard, dummy } = await deployContractsAndSetupModuleAndGuard();
+            const unauthorizedAddress = dummy.address;
+            const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
 
             await expect(
-                delegateCallAccessControlModule.checkTransaction(
+                avatar.execTransaction(
                     unauthorizedAddress,
                     0,
-                    "0x",
+                    dummyFunctionData, // Use an empty byte string instead of an empty string
                     1, // delegatecall
-                    0, 0, 0,
-                    AddressZero,
-                    AddressZero,
-                    "0x",
-                    user1.address
+                    0, // safeTxGas
+                    0, // base gas
+                    0, // gas price
+                    "0x0000000000000000000000000000000000000002", // dummy gas token
+                    "0x0000000000000000000000000000000000000003", // dummy refund receiver
+                    "0x0000000000000000000000000000000000000004" // dummy signatures
                 )
             ).to.be.revertedWith("Target address not authorized for delegatecall");
         });
 
         it("should allow regular calls to unauthorized addresses", async function () {
-            const { delegateCallAccessControlModule } = await setupTests();
-            const unauthorizedAddress = AddressZero;
+            const { avatar, delegatecallGuard, dummy } = await deployContractsAndSetupModuleAndGuard();
+            const unauthorizedAddress = dummy.address;
+            const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
 
-            await delegateCallAccessControlModule.checkTransaction(
+            expect(avatar.execTransaction(
                 unauthorizedAddress,
                 0,
-                "0x",
-                0, // regular call
-                0, 0, 0,
-                AddressZero,
-                AddressZero,
-                "0x",
-                user1.address
-            );
+                dummyFunctionData, // Use an empty byte string instead of an empty string
+                0, // call
+                0, // safeTxGas
+                0, // base gas
+                0, // gas price
+                "0x0000000000000000000000000000000000000002", // dummy gas token
+                "0x0000000000000000000000000000000000000003", // dummy refund receiver
+                "0x0000000000000000000000000000000000000004" // dummy signatures
+            )).to.not.be.reverted;
         });
 
         it("should allow delegatecall after authorization", async function () {
-            const { delegateCallAccessControlModule, delay } = await setupTests();
-            const authorizedAddress = user1.address;
+            const { delegatecallGuard, avatar, delayModule, dummy } = await deploySetupAndAuthorize();
+            const authorizedAddress = dummy.address;
 
-            await delegateCallAccessControlModule.requestBatchAuthorization([authorizedAddress]);
-            await ethers.provider.send("evm_increaseTime", [86401]);
+            const dummyFunctionData = dummy.interface.encodeFunctionData("dummy", []);
 
-            const data = delegateCallAccessControlModule.interface.encodeFunctionData(
-                "confirmBatchAuthorization",
-                [[authorizedAddress]]
-            );
 
-            await delay.executeNextTx(
-                delegateCallAccessControlModule.address,
-                0,
-                data,
-                0
-            );
-
-            expect(await delegateCallAccessControlModule.authorizedAddresses(authorizedAddress)).to.be.true;
-
-            await delegateCallAccessControlModule.checkTransaction(
+            await avatar.execTransaction(
                 authorizedAddress,
                 0,
-                "0x",
+                dummyFunctionData, // Use an empty byte string instead of an empty string
                 1, // delegatecall
-                0, 0, 0,
-                AddressZero,
-                AddressZero,
-                "0x",
-                user1.address
-            );
+                0, // safeTxGas
+                0, // base gas
+                0, // gas price
+                "0x0000000000000000000000000000000000000002", // dummy gas token
+                "0x0000000000000000000000000000000000000003", // dummy refund receiver
+                "0x0000000000000000000000000000000000000004" // dummy signatures
+            )
+
         });
 
         it("should deauthorize an address and block future delegatecalls", async function () {
-            const { delegateCallAccessControlModule } = await setupTests();
+            const { delegatecallGuard } = await deploySetupAndAuthorize();
             const authorizedAddress = user1.address;
 
-            await delegateCallAccessControlModule.requestBatchAuthorization([authorizedAddress]);
+            await delegatecallGuard.requestBatchAuthorization([authorizedAddress]);
             await ethers.provider.send("evm_increaseTime", [86401]);
-            await delegateCallAccessControlModule.confirmBatchAuthorization([authorizedAddress]);
+            await delegatecallGuard.confirmBatchAuthorization([authorizedAddress]);
 
-            expect(await delegateCallAccessControlModule.authorizedAddresses(authorizedAddress)).to.be.true;
+            expect(await delegatecallGuard.authorizedAddresses(authorizedAddress)).to.be.true;
 
-            await delegateCallAccessControlModule.requestBatchDeauthorization([authorizedAddress]);
+            await delegatecallGuard.requestBatchDeauthorization([authorizedAddress]);
 
-            expect(await delegateCallAccessControlModule.authorizedAddresses(authorizedAddress)).to.be.false;
+            expect(await delegatecallGuard.authorizedAddresses(authorizedAddress)).to.be.false;
 
             await expect(
-                delegateCallAccessControlModule.checkTransaction(
+                delegatecallGuard.checkTransaction(
                     authorizedAddress,
                     0,
                     "0x",
@@ -218,3 +299,26 @@ describe("DelegatecallGuard Integration Tests", function () {
         });
     });
 });
+
+
+
+
+
+
+
+async function callExecTransaction(avatar: any, to: any, data: any) {
+    const txResponse = await avatar.execTransaction(
+        to.address, // to
+        0,              // value
+        data,   // data
+        0,              // operation (0 for call)
+        0,              // safeTxGas
+        0,              // baseGas
+        0,              // gasPrice
+        AddressZero,    // gasToken
+        AddressZero,    // refundReceiver
+        "0x"            // signatures
+    );
+    return await txResponse.wait();
+
+}

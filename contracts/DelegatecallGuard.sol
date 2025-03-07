@@ -37,7 +37,7 @@ interface ISafe {
  * @dev A Zodiac guard module that protects delegatecall operations by verifying the candidateDelegate address
  * is in an authorized list. Uses the Delay module for timelock functionality.
  */
-contract DelegatecallGuardDelegatecallGuard is BaseGuard, FactoryFriendly {
+contract DelegatecallGuard is BaseGuard, FactoryFriendly {
     // Constants
     uint256 public constant DELEGATECALL_OPERATION = 1;
 
@@ -91,21 +91,13 @@ contract DelegatecallGuardDelegatecallGuard is BaseGuard, FactoryFriendly {
         emit DelegatecallGuardSetup(_owner, _delayModule);
     }
 
-    modifier onlyDelayModule() {
-        require(
-            msg.sender == address(delayModule),
-            "Only callable via Delay module"
-        );
-        _;
-    }
-
     /**
      * @dev Requests authorization for multiple addresses to be used with delegatecall
      * This will queue a single authorization request in the Delay module
      * @param _targets Array of addresses to be authorized
      */
     function requestBatchAuthorization(
-        address[] calldata _targets
+        address[] memory _targets
     ) external onlyOwner {
         // Validate the input addresses
         for (uint256 i = 0; i < _targets.length; i++) {
@@ -140,28 +132,12 @@ contract DelegatecallGuardDelegatecallGuard is BaseGuard, FactoryFriendly {
     }
 
     /**
-     * @dev Confirms authorization for a target address
-     * @param _target Address to be authorized
-     */
-    function confirmAuthorization(address _target) external onlyDelayModule {
-        // Ensure this is called by the Delay module
-        require(
-            msg.sender == address(delayModule),
-            "Only callable via Delay module"
-        );
-        authorizedAddresses[_target] = true;
-
-        // Emit an event for the authorization
-        emit AddressAuthorized(_target);
-    }
-
-    /**
      * @dev Confirms authorization for multiple target addresses
      * @param _targets Array of addresses to be authorized
      */
     function confirmBatchAuthorization(
         address[] calldata _targets
-    ) external onlyDelayModule {
+    ) external onlyOwner {
         for (uint256 i = 0; i < _targets.length; i++) {
             address _target = _targets[i];
             require(
@@ -230,16 +206,14 @@ contract DelegatecallGuardDelegatecallGuard is BaseGuard, FactoryFriendly {
         address payable refundReceiver,
         bytes memory signatures,
         address msgSender
-    ) external override onlyOwner {
-        if (operation == Enum.Operation.Call) {
-            // If the operation is a call, we don't need to check the target address
-            return;
-        } else {
+    ) external override  {
+        if (operation == Enum.Operation.DelegateCall) {
             require(
                 authorizedAddresses[to],
                 "Target address not authorized for delegatecall"
             );
         }
+        return;
     }
 
     /**

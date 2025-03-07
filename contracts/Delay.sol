@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity >=0.8.0;
 
-import {Enum, Modifier} from "@gnosis.pm/zodiac/contracts/core/Modifier.sol";
+import {Enum, Modifier} from "@gnosis-guild/zodiac-core/contracts/core/Modifier.sol";
 
 contract Delay is Modifier {
     event DelaySetup(
@@ -77,6 +77,7 @@ contract Delay is Modifier {
         target = _target;
         txExpiration = _expiration;
         txCooldown = _cooldown;
+        setupModules();
 
         emit DelaySetup(msg.sender, _owner, _avatar, _target);
         emit AvatarSet(address(0), _avatar);
@@ -226,4 +227,4 @@ contract Delay is Modifier {
     function getTxCreatedAt(uint256 _nonce) public view returns (uint256) {
         return (txCreatedAt[_nonce]);
     }
-} 
+}

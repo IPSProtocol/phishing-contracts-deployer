@@ -6,7 +6,6 @@ import "@gnosis.pm/safe-contracts/contracts/base/GuardManager.sol";
 
 contract TestAvatar is StorageAccessible, GuardManager {
     address public module;
-    address public guard;
 
     receive() external payable {}
 
@@ -30,6 +29,7 @@ contract TestAvatar is StorageAccessible, GuardManager {
         address payable refundReceiver,
         bytes memory signatures
     ) public payable returns (bool) {
+        address guard = getGuard();
         if (guard != address(0)) {
             Guard(guard).checkTransaction(
                 to,
@@ -62,5 +62,9 @@ contract TestAvatar is StorageAccessible, GuardManager {
         require(msg.sender == module, "Not authorized");
         if (operation == 1) (success, ) = to.delegatecall(data);
         else (success, ) = to.call{value: value}(data);
+    }
+
+    function getGuardAddress() external view returns (address) {
+        return getGuard();
     }
 }
