@@ -1,9 +1,7 @@
-import assert from "assert";
 import { AddressZero } from "@ethersproject/constants";
 import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
-import { retrieveLogs } from "./utils";
-import { log } from "console";
+
 
 
 describe("Delay Contract Tests", function () {
@@ -24,30 +22,27 @@ describe("Delay Contract Tests", function () {
     });
 
     it("should set up the contract correctly", async function () {
-        expect(await delayModule.txCooldown()).to.equal(86400);
-        expect(await delayModule.txExpiration()).to.equal(0);
+        expect((await delayModule.txCooldown()).toString()).to.eq("86400");
+        expect((await delayModule.txExpiration()).toString()).to.equal("0");
     });
-
-    // Add more tests as needed...
 });
 
 
 
 describe("delegatecallGuard Integration Tests", function () {
     let user1: any, user2: any;
-    const abiCoder = new ethers.utils.AbiCoder();
 
     const deployContractsAndSetupModuleAndGuard = deployments.createFixture(async () => {
         // await deployments.fixture();
         const DummyFactory = await hre.ethers.getContractFactory("Dummy");
         const dummy = await DummyFactory.deploy();
         await dummy.deployed();
-        console.log("dummy deployed", dummy.address);
+
 
         const avatarFactory = await hre.ethers.getContractFactory("TestAvatar");
         const avatar = await avatarFactory.deploy();
         await avatar.deployed();
-        console.log("avatar deployed", avatar.address);
+
 
         const delayFactory = await hre.ethers.getContractFactory("Delay");
         const delayModule = await delayFactory.deploy(
@@ -58,7 +53,6 @@ describe("delegatecallGuard Integration Tests", function () {
             0      // expiration
         );
         await delayModule.deployed();
-        console.log("delay deployed", delayModule.address);
 
         await (await avatar.enableModule(delayModule.address)).wait();
 
@@ -69,7 +63,6 @@ describe("delegatecallGuard Integration Tests", function () {
             delayModule.address
         );
         await delegatecallGuard.deployed();
-        console.log("delegatecallGuard deployed", delegatecallGuard.address);
 
         //enable the GuardModule on the Delay
         // Enable the module after deployment
@@ -78,7 +71,7 @@ describe("delegatecallGuard Integration Tests", function () {
 
         // Call execTransaction from the owner to set the guard
         const tx = await callExecTransaction(avatar, delayModule, enableModuleData);
-        console.log("is Module Enabled", await delayModule.isModuleEnabled(moduleAddress));
+
         expect(await delayModule.isModuleEnabled(delegatecallGuard.address)).to.equal(true);
 
         const setGuardData = avatar.interface.encodeFunctionData("setGuard", [delegatecallGuard.address]);
@@ -89,7 +82,6 @@ describe("delegatecallGuard Integration Tests", function () {
         // expect the guard address to be set correctly.
         expect(await avatar.getGuardAddress()).to.equal(delegatecallGuard.address);
 
-        console.log("Guard set Correctly to: " + delegatecallGuard.address);
         return {
             avatar,
             delayModule,
@@ -109,7 +101,6 @@ describe("delegatecallGuard Integration Tests", function () {
 
         // Call execTransaction from the avatar to request batch authorization
         await callExecTransaction(avatar, delegatecallGuard, requestBatchAuthorizationData);
-        console.log("Batch authorization requested via execTransaction");
 
         // Check not authorized yet
         for (const target of authorizedTargets) {
@@ -159,7 +150,6 @@ describe("delegatecallGuard Integration Tests", function () {
 
             // Call execTransaction from the avatar to request batch authorization
             await callExecTransaction(avatar, delegatecallGuard, requestBatchAuthorizationData);
-            console.log("Batch authorization requested via execTransaction");
 
             // Check not authorized yet
             for (const target of authorizedTargets) {
@@ -198,7 +188,6 @@ describe("delegatecallGuard Integration Tests", function () {
 
             // Call execTransaction from the avatar to request batch authorization
             await callExecTransaction(avatar, delegatecallGuard, requestBatchDeauthorizationData);
-            console.log("Batch deauthorization requested via safe execTransaction");
 
             // Check not authorized yet
             for (const target of authorizedTargets) {
