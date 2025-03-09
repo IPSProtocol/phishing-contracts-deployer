@@ -12,7 +12,7 @@ interface IDelegatecallGuard {
         address _deauthorizationDelayModule // Address of the delay module for deauthorization
     );
     event BatchAuthorizationRequested(address[] _targets);
-    event BatchDeAuthorizationRequested(address[] _targets);
+    event BatchDeauthorizationRequested(address[] _targets);
     event BatchAddressAuthorized(address[] _targets);
     event BatchAddressDeauthorized(address[] _targets);
 
@@ -48,33 +48,4 @@ interface IDelegatecallGuard {
      * @return bool indicating whether the address is authorized
      */
     function isAuthorized(address _target) external view returns (bool);
-
-    /**
-     * @dev Checks if a target address is authorized for delegatecall.
-     * This function is called before executing a transaction.
-     * @param to Target address for the transaction
-     * @param value Amount of Ether to send (not used in this guard)
-     * @param data Function selector and parameters for the transaction
-     * @param operation Type of operation (0=call, 1=delegatecall)
-     * @param safeTxGas Gas limit for the transaction
-     * @param baseGas Base gas for the transaction
-     * @param gasPrice Gas price for the transaction
-     * @param gasToken Token used for gas payment
-     * @param refundReceiver Address to receive any refunds
-     * @param signatures Signatures for the transaction
-     * @param msgSender Address of the sender
-     */
-    function checkTransaction(
-        address to,
-        uint256 value,
-        bytes memory data,
-        Enum.Operation operation,
-        uint256 safeTxGas,
-        uint256 baseGas,
-        uint256 gasPrice,
-        address gasToken,
-        address payable refundReceiver,
-        bytes memory signatures,
-        address msgSender
-    ) external;
 }

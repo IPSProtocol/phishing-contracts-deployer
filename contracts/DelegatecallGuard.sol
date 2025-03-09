@@ -18,7 +18,7 @@ import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
  *
  * ## Delay Modules
  * The DelegatecallGuard allows the usage of timelocks on both authorization and deauthorization processes.
- * Users can set different cooldown periods for authorization and deauthorization processes by using `authorizationDelayModule` and `deAuthorizationDelayModule`.
+ * Users can set different cooldown periods for authorization and deauthorization processes by using `authorizationDelayModule` and `deauthorizationDelayModule`.
  *
  * If a user wants to have the same cooldown period for both processes, they can set both delay modules parameters to the same address.
  * If a user does not want any delays, they can set the delay modules parameters to `address(0)`.
@@ -29,10 +29,10 @@ import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
  *
  * @dev This guard is compatible with the Gnosis Safe.
  */
-contract DelegatecallGuard is BaseGuard, FactoryFriendly {
+contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     // State variables
     Delay public authorizationDelayModule; // Delay module for authorization requests
-    Delay public deAuthorizationDelayModule; // Delay module for deauthorization requests
+    Delay public deauthorizationDelayModule; // Delay module for deauthorization requests
     address public authorizationManager; // Address of the manager responsible for managing the authorization list
 
     // Mapping to store authorized addresses for delegatecall
@@ -78,7 +78,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
         __Ownable_init(_owner);
 
         authorizationDelayModule = Delay(_authorizationDelayModule);
-        deAuthorizationDelayModule = Delay(_deauthorizationDelayModule);
+        deauthorizationDelayModule = Delay(_deauthorizationDelayModule);
         authorizationManager = _authorizationManager;
 
         emit DelegatecallGuardSetup(
@@ -99,21 +99,6 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
     function requestBatchAuthorization(
         address[] calldata _targets
     ) external onlyAuthorizationManager {
-        address target;
-        // Validate the input addresses before queuing the request for better UX
-        for (uint256 i = 0; i < _targets.length; i++) {
-            target = _targets[i];
-
-            require(
-                target != address(0),
-                "Invalid target address for delegatecall"
-            );
-
-            require(
-                !authorizedAddresses[target],
-                "Target address already authorized"
-            );
-        }
 
         if (address(authorizationDelayModule) != address(0)) {
             // Prepare the data for the authorizationDelayModule to execute
@@ -128,7 +113,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
                 data,
                 Enum.Operation.Call
             );
-            emit BatchAddressAuthorizedRequested(_targets);
+            emit BatchAuthorizationRequested(_targets);
         } else {
             _confirmBatchAuthorization(_targets);
         }
@@ -142,7 +127,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     function confirmBatchAuthorization(
         address[] calldata _targets
-    ) external onlyAuthorizationDelayModule {
+    ) external onlyAuthorizationManager {
         _confirmBatchAuthorization(_targets);
     }
 
@@ -152,8 +137,15 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      * @param _targets Array of addresses to be authorized
      */
     function _confirmBatchAuthorization(address[] calldata _targets) internal {
+        address target;
         for (uint256 i = 0; i < _targets.length; i++) {
-            authorizedAddresses[_targets[i]] = true;
+            target = _targets[i];
+            require(
+                target != address(0),
+                "Invalid target address for delegatecall"
+            );
+
+            authorizedAddresses[target] = true;
         }
 
         // Emit a single event for the batch confirmation
@@ -175,20 +167,20 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
     function requestBatchDeauthorization(
         address[] calldata _targets
     ) external onlyAuthorizationManager {
-        if (address(deAuthorizationDelayModule) != address(0)) {
+        if (address(deauthorizationDelayModule) != address(0)) {
             // Prepare the data for the deauthorizationDelayModule to execute
             bytes memory data = abi.encodeWithSelector(
                 this.confirmBatchDeauthorization.selector,
                 _targets
             );
             // Queue a single deauthorization request in the Delay module
-            deAuthorizationDelayModule.execTransactionFromModule(
+            deauthorizationDelayModule.execTransactionFromModule(
                 address(this),
                 0,
                 data,
                 Enum.Operation.Call
             );
-            emit BatchAddressDeauthorizedRequested(_targets);
+            emit BatchDeauthorizationRequested(_targets);
         } else {
             _confirmBatchDeauthorization(_targets);
         }
@@ -201,7 +193,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     function confirmBatchDeauthorization(
         address[] calldata _targets
-    ) external onlyDeauthorizationDelayModule {
+    ) external onlyAuthorizationManager {
         _confirmBatchDeauthorization(_targets);
     }
 
@@ -253,7 +245,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
         address payable refundReceiver,
         bytes memory signatures,
         address msgSender
-    ) external override {
+    ) external view override {
         if (operation == Enum.Operation.DelegateCall) {
             require(
                 authorizedAddresses[to],
@@ -300,7 +292,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     modifier onlyAuthorizationDelayModule() {
         require(
-            msg.sender == authorizationDelayModule,
+            msg.sender == address(authorizationDelayModule),
             "Caller is not the authorization manager"
         );
         _;
@@ -310,7 +302,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     modifier onlyDeauthorizationDelayModule() {
         require(
-            msg.sender == deAuthorizationDelayModule,
+            msg.sender == address(deauthorizationDelayModule),
             "Caller is not the deauthorization manager"
         );
         _;

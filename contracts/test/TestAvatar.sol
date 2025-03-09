@@ -5,16 +5,19 @@ import "@gnosis.pm/safe-contracts/contracts/common/StorageAccessible.sol";
 import "@gnosis.pm/safe-contracts/contracts/base/GuardManager.sol";
 
 contract TestAvatar is StorageAccessible, GuardManager {
-    address public module;
+    mapping(address => bool) internal modules;
 
     receive() external payable {}
 
-    function enableModule(address _module) external {
-        module = _module;
+    /// @dev Allows to add a module to the whitelist.
+    ///      This can only be done via a Safe transaction.
+    /// @param module Module to be whitelisted.
+    function enableModule(address module) public {
+        modules[module] = true;
     }
 
     function isModuleEnabled(address _module) external view returns (bool) {
-        return (module == _module);
+        return (modules[_module]);
     }
 
     function execTransaction(
@@ -59,7 +62,7 @@ contract TestAvatar is StorageAccessible, GuardManager {
         bytes calldata data,
         uint8 operation
     ) external returns (bool success) {
-        require(msg.sender == module, "Not authorized");
+        require(modules[msg.sender], "Not authorized");
         if (operation == 1) (success, ) = to.delegatecall(data);
         else (success, ) = to.call{value: value}(data);
     }
