@@ -98,7 +98,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     function requestBatchAuthorization(
         address[] calldata _targets
-    ) external onlyManager {
+    ) external onlyAuthorizationManager {
         address target;
         // Validate the input addresses before queuing the request for better UX
         for (uint256 i = 0; i < _targets.length; i++) {
@@ -290,7 +290,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     modifier onlyAuthorizationManager() {
         require(
-            msg.sender == manager,
+            msg.sender == authorizationManager,
             "Caller is not the authorization manager"
         );
         _;
@@ -300,7 +300,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     modifier onlyAuthorizationDelayModule() {
         require(
-            msg.sender == authorizationManager,
+            msg.sender == authorizationDelayModule,
             "Caller is not the authorization manager"
         );
         _;
@@ -310,7 +310,7 @@ contract DelegatecallGuard is BaseGuard, FactoryFriendly {
      */
     modifier onlyDeauthorizationDelayModule() {
         require(
-            msg.sender == deauthorizationManager,
+            msg.sender == deAuthorizationDelayModule,
             "Caller is not the deauthorization manager"
         );
         _;
