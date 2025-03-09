@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity 0.8.20;
+pragma solidity 0.8.28;
 
 import "@gnosis.pm/zodiac/contracts/interfaces/IAvatar.sol";
 import "@gnosis.pm/zodiac/contracts/guard/BaseGuard.sol";
@@ -76,7 +76,10 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
             address _deauthorizationDelayModule
         ) = abi.decode(initializeParams, (address, address, address, address));
         __Ownable_init(_owner);
-
+        require(
+            _authorizationManager != address(0),
+            "Authorization Manager cannot be zero address"
+        );
         authorizationDelayModule = Delay(_authorizationDelayModule);
         deauthorizationDelayModule = Delay(_deauthorizationDelayModule);
         authorizationManager = _authorizationManager;
@@ -99,21 +102,26 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     function requestBatchAuthorization(
         address[] calldata _targets
     ) external onlyAuthorizationManager {
-
         if (address(authorizationDelayModule) != address(0)) {
             // Prepare the data for the authorizationDelayModule to execute
             bytes memory data = abi.encodeWithSelector(
                 this.confirmBatchAuthorization.selector,
                 _targets
             );
+
+            emit BatchAuthorizationRequested(_targets);
+
             // Queue a single authorization request in the Delay module
-            authorizationDelayModule.execTransactionFromModule(
+            bool success = authorizationDelayModule.execTransactionFromModule(
                 address(this),
                 0,
                 data,
                 Enum.Operation.Call
             );
-            emit BatchAuthorizationRequested(_targets);
+            require(
+                success,
+                "Failed to queue authorization request in the authorization delay module"
+            );
         } else {
             _confirmBatchAuthorization(_targets);
         }
@@ -173,14 +181,18 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
                 this.confirmBatchDeauthorization.selector,
                 _targets
             );
+            emit BatchDeauthorizationRequested(_targets);
             // Queue a single deauthorization request in the Delay module
-            deauthorizationDelayModule.execTransactionFromModule(
+            bool success = deauthorizationDelayModule.execTransactionFromModule(
                 address(this),
                 0,
                 data,
                 Enum.Operation.Call
             );
-            emit BatchDeauthorizationRequested(_targets);
+            require(
+                success,
+                "Failed to queue deauthorization request in the deauthorization delay module"
+            );
         } else {
             _confirmBatchDeauthorization(_targets);
         }
