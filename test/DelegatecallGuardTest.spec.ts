@@ -2,8 +2,12 @@ import { AddressZero } from "@ethersproject/constants";
 import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
+(async () => {
+    const chai = await import("chai");
+    const chaiAsPromised = await import("chai-as-promised");
 
-
+    chai.default.use(chaiAsPromised.default);
+})();
 describe("Delay Contract Tests", function () {
     let authorizationDelayModule: any
     let owner: any;
@@ -29,7 +33,184 @@ describe("Delay Contract Tests", function () {
 
 });
 
+describe("DelegatecallGuard - Initialization conditions ", function () {
 
+    it("Test deployments authorization mode parameters check", async function () {
+        await expect(
+            getDelegateCall({ authorizationMode: "0" })
+        ).to.be.revertedWith("Invalid authorization mode");
+        await expect(
+            getDelegateCall({ authorizationMode: "4" })
+        ).to.be.revertedWith("Invalid authorization mode");
+    });
+
+
+    it("Test deployments authorization manager  parameters check", async function () {
+        await expect(
+            getDelegateCall({ authorizationManager: "0x0000000000000000000000000000000000000000" })
+        ).to.be.revertedWith("Authorization Manager cannot be zero address");
+    });
+
+    it("Test deployments authorization manager  parameters check", async function () {
+        await expect(
+            getDelegateCall({ authorizationManager: "0x0000000000000000000000000000000000000000" })
+        ).to.be.revertedWith("Authorization Manager cannot be zero address");
+    });
+
+    it("Test deployments Timelock Modules  parameters check", async function () {
+        const delegatecallGuard = await getDelegateCall({});
+        await expect(
+            getDelegateCall({ authorizationDelayModule: "0x0000000000000000000000000000000000000000" })
+        ).to.be.revertedWith("Authorization Delay Module cannot be zero address");
+        await expect(
+            getDelegateCall({ deauthorizationDelayModule: "0x0000000000000000000000000000000000000000" })
+        ).to.be.revertedWith("Deauthorization Delay Module cannot be zero address");
+
+        expect(getDelegateCall({ authorizationDelayModule: "0x0000000000000000000000000000000000000000", deauthorizationDelayModule: "0x0000000000000000000000000000000000000000" })).to.emit(delegatecallGuard, "AuthorizationTimelockNotSet");
+        expect(getDelegateCall({ authorizationDelayModule: "0x0000000000000000000000000000000000000000", deauthorizationDelayModule: "0x0000000000000000000000000000000000000000" })).to.emit(delegatecallGuard, "DeauthorizationTimelockNotSet");
+
+    });
+
+    it("Test deployments Owner parameters check", async function () {
+        expect(getDelegateCall({ ownerAddress: "0x0000000000000000000000000000000000000000" })).to.be.revertedWith("Owner cannot be zero address");
+
+    });
+});
+describe("DelegatecallGuard - Authorization Modes", function () {
+    let delegatecallGuardMode1: any;
+    let delegatecallGuardMode2: any;
+    let delegatecallGuardMode3: any;
+    let owner: any;
+    let unauthorizedTarget = "0x0000000000000000000000000000000000000010";
+    let authorizedTarget = "0x0000000000000000000000000000000000000002";
+    let impersonatedAuthorizationManager = "0x0000000000000000000000000000000000000003";
+
+    beforeEach(async function () {
+        [owner] = await ethers.getSigners();
+
+        const DelegatecallGuard = await ethers.getContractFactory("DelegatecallGuard");
+        delegatecallGuardMode1 = await DelegatecallGuard.deploy(
+            "0x0000000000000000000000000000000000000001", // dummy addr
+            "1", // delegate mode mode
+            "0x0000000000000000000000000000000000000001", // dummy addr
+            "0x0000000000000000000000000000000000000001",// dummy addr
+            "0x0000000000000000000000000000000000000001");
+        await delegatecallGuardMode1.deployed();
+
+        delegatecallGuardMode2 = await DelegatecallGuard.deploy(
+            "0x0000000000000000000000000000000000000001", // dummy addr
+            "2", // delegate mode mode
+            "0x0000000000000000000000000000000000000001", // dummy addr
+            "0x0000000000000000000000000000000000000001",// dummy addr
+            "0x0000000000000000000000000000000000000001");
+        await delegatecallGuardMode2.deployed();
+
+        delegatecallGuardMode3 = await DelegatecallGuard.deploy(
+            "0x0000000000000000000000000000000000000001", // dummy addr
+            "3", // delegate mode mode
+            impersonatedAuthorizationManager, // dummy addr
+            "0x0000000000000000000000000000000000000001",// dummy addr
+            "0x0000000000000000000000000000000000000001");
+        await delegatecallGuardMode3.deployed();
+    });
+
+
+    describe("Mode 0x1: Restrict Delegatecall, Allow Call", function () {
+
+
+        it("Should revert delegatecall and let regular call to an unauthorized address", async function () {
+            await expect(
+                delegatecallGuardMode1.callStatic.checkTransaction(
+                    unauthorizedTarget, 1, "0x", 1, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.be.revertedWith("Target address not authorized for delegatecall");
+
+        });
+
+        it("Should NOT revert for regular call", async function () {
+            await expect(
+                delegatecallGuardMode1.callStatic.checkTransaction(
+                    unauthorizedTarget, 0, "0x", 0, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.not.be.reverted;
+        });
+    });
+
+    describe("Mode 0x2: Restrict Call, Allow Delegatecall", function () {
+
+
+        it("Should revert regular call to an unauthorized address", async function () {
+            await expect(
+                delegatecallGuardMode2.callStatic.checkTransaction(
+                    unauthorizedTarget, 0, "0x", 0, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.be.revertedWith("Target address not authorized for call");
+        });
+
+        it("Should NOT revert for delegatecall", async function () {
+            await expect(
+                delegatecallGuardMode2.callStatic.checkTransaction(
+                    unauthorizedTarget, 1, "0x", 1, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.not.be.reverted;
+        });
+    });
+
+    describe("Mode 0x3: Restrict Both Delegatecall & Call", function () {
+
+
+        it("Should revert delegatecall to an unauthorized address", async function () {
+            expect(await delegatecallGuardMode3.isAuthorized(unauthorizedTarget)).to.be.false;
+            await expect(
+                delegatecallGuardMode3.callStatic.checkTransaction(
+                    unauthorizedTarget, 0, "0x", 1, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.be.revertedWith("Target address not authorized for delegatecall");
+        });
+
+        it("Should revert regular call to an unauthorized address", async function () {
+            await expect(
+                delegatecallGuardMode3.callStatic.checkTransaction(
+                    unauthorizedTarget, 0, "0x", 0, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.be.revertedWith("Target address not authorized for call");
+        });
+    });
+
+    describe("Authorized addresses should not revert", function () {
+        let impersonatedAuthorizationManagerSigner;
+        before(async function () {
+            let deployer;
+            [deployer] = await ethers.getSigners();
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: [impersonatedAuthorizationManager],
+            });
+            await deployer.sendTransaction({
+                to: impersonatedAuthorizationManager,
+                value: ethers.utils.parseEther("1.0"), // Sending 1 Ether
+            });
+            // Get the signer for the impersonated address
+            const impersonatedAuthorizationManagerSigner = await ethers.getSigner(impersonatedAuthorizationManager);
+            await delegatecallGuardMode3.connect(impersonatedAuthorizationManagerSigner).requestBatchAuthorization([authorizedTarget]);
+        });
+        it("Should NOT revert for delegatecall to an authorized address", async function () {
+            await expect(
+                delegatecallGuardMode3.connect(impersonatedAuthorizationManagerSigner).checkTransaction(
+                    authorizedTarget, 0, "0x", 1, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.not.be.reverted;
+        });
+
+        it("Should NOT revert for regular call to an authorized address", async function () {
+            await expect(
+                delegatecallGuardMode3.connect(impersonatedAuthorizationManagerSigner).checkTransaction(
+                    authorizedTarget, 0, "0x", 0, 0, 0, 0, ethers.constants.AddressZero, ethers.constants.AddressZero, "0x", owner.address
+                )
+            ).to.not.be.reverted;
+        });
+    });
+});
 
 describe("delegatecallGuard Integration Tests", function () {
     let user1: any, user2: any;
@@ -52,9 +233,10 @@ describe("delegatecallGuard Integration Tests", function () {
         const DelegatecallGuardFactory = await hre.ethers.getContractFactory("DelegatecallGuard");
         const delegatecallGuard = await DelegatecallGuardFactory.deploy(
             avatar.address,
+            "1", // authorization mode
             avatar.address, // authorization manager
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000"
+            "0x0000000000000000000000000000000000000001",
+            "0x0000000000000000000000000000000000000001",
         );
         await delegatecallGuard.deployed();
 
@@ -111,9 +293,10 @@ describe("delegatecallGuard Integration Tests", function () {
         const DelegatecallGuardFactory = await hre.ethers.getContractFactory("DelegatecallGuard");
         const delegatecallGuard = await DelegatecallGuardFactory.deploy(
             avatar.address,
+            "1", // authorization mode
             avatar.address, // authorization manager
             authorizationDelayModule.address,
-            deauthorizationDelayModule.address
+            deauthorizationDelayModule.address,
         );
         await delegatecallGuard.deployed();
 
@@ -154,7 +337,7 @@ describe("delegatecallGuard Integration Tests", function () {
 
     const deploySetupAndAuthorize = deployments.createFixture(async () => {
 
-        const { avatar, authorizationDelayModule,deauthorizationDelayModule, delegatecallGuard, dummy } = await deployContractsAndSetupDelayModuleAndGuard();
+        const { avatar, authorizationDelayModule, deauthorizationDelayModule, delegatecallGuard, dummy } = await deployContractsAndSetupDelayModuleAndGuard();
         const authorizedTargets = [user1.address, user2.address, dummy.address];
 
 
@@ -202,6 +385,7 @@ describe("delegatecallGuard Integration Tests", function () {
         [user1, user2] = await ethers.getSigners();
     });
 
+
     describe("Authorization Management", function () {
         it("test deployContractsAndSetupDelayModuleAndGuard fixture", async function () {
 
@@ -242,6 +426,7 @@ describe("delegatecallGuard Integration Tests", function () {
             const DelegatecallGuardFactory = await hre.ethers.getContractFactory("DelegatecallGuard");
             const delegatecallGuard = await DelegatecallGuardFactory.deploy(
                 avatar.address,
+                "1", // authorization mode
                 avatar.address, // authorization manager
                 authorizationDelayModule.address,
                 deauthorizationDelayModule.address
@@ -273,9 +458,6 @@ describe("delegatecallGuard Integration Tests", function () {
 
             // expect the guard address to be set correctly.
             expect(await avatar.getGuardAddress()).to.equal(delegatecallGuard.address);
-
-
-
 
         });
         it("should authorize a batch of addresses and finalize the tx without delay. Also deauthorize the same batch of addresses", async function () {
@@ -450,7 +632,32 @@ describe("delegatecallGuard Integration Tests", function () {
     });
 });
 
+interface GetDelegateCallParams {
+    ownerAddress?: string; // Default dummy address
+    authorizationMode?: string; // Default authorization mode
+    authorizationManager?: string; // Default dummy address
+    authorizationDelayModule?: string; // Default dummy address
+    deauthorizationDelayModule?: string; // Default dummy address
+}
 
+async function getDelegateCall({
+    ownerAddress = "0x0000000000000000000000000000000000000001", // Default dummy address
+    authorizationMode = "1", // Default authorization mode
+    authorizationManager = "0x0000000000000000000000000000000000000001", // Default dummy address
+    authorizationDelayModule = "0x0000000000000000000000000000000000000001", // Default dummy address
+    deauthorizationDelayModule = "0x0000000000000000000000000000000000000001" // Default dummy address
+}: GetDelegateCallParams) {
+    const DelegatecallGuard = await ethers.getContractFactory("DelegatecallGuard");
+    const delegatecallGuard = await DelegatecallGuard.deploy(
+        ownerAddress,
+        authorizationMode,
+        authorizationManager,
+        authorizationDelayModule,
+        deauthorizationDelayModule
+    );
+    await delegatecallGuard.deployed();
+    return delegatecallGuard;
+}
 
 async function callExecTransaction(avatar: any, to: any, data: any) {
     const txResponse = await avatar.execTransaction(

@@ -21,7 +21,7 @@ import "@gnosis.pm/zodiac/contracts/factory/FactoryFriendly.sol";
  * Users can set different cooldown periods for authorization and deauthorization processes by using `authorizationDelayModule` and `deauthorizationDelayModule`.
  *
  * If a user wants to have the same cooldown period for both processes, they can set both delay modules parameters to the same address.
- * If a user does not want any delays, they can set the delay modules parameters to `address(0)`.
+ * If a user does not want any delays, they can set the delay modules parameters to `address(1)`.
  *
  * ## Notes on Deauthorization
  * The DelegatecallGuard does not check if the addresses to be deauthorized are currently authorized. As a consequence, observing an address being deauthorized does not imply that it was previously authorized.
@@ -34,6 +34,7 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     Delay public authorizationDelayModule; // Delay module for authorization requests
     Delay public deauthorizationDelayModule; // Delay module for deauthorization requests
     address public authorizationManager; // Address of the manager responsible for managing the authorization list
+    uint8 public authorizationMode; // authorization mode
 
     // Mapping to store authorized addresses for delegatecall
     mapping(address => bool) public authorizedAddresses;
@@ -41,22 +42,21 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     /**
      * @dev Constructor for direct deployment. Anyone can deploy this module.
      * @param _owner Address of the owner (typically the Safe)
+     * @param _authorizationMode `0x1` → Restricts only delegatecall operations. `0x2` → Restricts only calls, `0x3` → Restricts both `delegatecall` and regular calls.
      * @param _authorizationManager Address of the manager responsible for managing authorizations
      * @param _authorizationDelayModule Address of the Delay module used for authorization
      * @param _deauthorizationDelayModule Address of the Delay module used for deauthorization
      */
     constructor(
         address _owner,
+        uint8 _authorizationMode,
         address _authorizationManager,
         address _authorizationDelayModule,
         address _deauthorizationDelayModule
     ) {
-        require(
-            _authorizationManager != address(0),
-            "Authorization Manager cannot be zero address"
-        );
         bytes memory initializeParams = abi.encode(
             _owner,
+            _authorizationMode,
             _authorizationManager,
             _authorizationDelayModule,
             _deauthorizationDelayModule
@@ -71,21 +71,48 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     function setUp(bytes memory initializeParams) public override initializer {
         (
             address _owner,
+            uint8 _authorizationMode,
             address _authorizationManager,
             address _authorizationDelayModule,
             address _deauthorizationDelayModule
-        ) = abi.decode(initializeParams, (address, address, address, address));
-        __Ownable_init(_owner);
+        ) = abi.decode(
+                initializeParams,
+                (address, uint8, address, address, address)
+            );
+        require(_owner != address(0), "Owner cannot be zero address");
+
         require(
             _authorizationManager != address(0),
             "Authorization Manager cannot be zero address"
         );
+        require(
+            _authorizationDelayModule != address(0),
+            "Authorization Delay Module cannot be zero address"
+        );
+        require(
+            _deauthorizationDelayModule != address(0),
+            "Deauthorization Delay Module cannot be zero address"
+        );
+        require(
+            _authorizationMode == 0x1 ||
+                _authorizationMode == 0x2 ||
+                _authorizationMode == 0x3,
+            "Invalid authorization mode"
+        );
+        if (_authorizationDelayModule != address(1)) {
+            emit AuthorizationTimelockNotSet();
+        }
+        if (_deauthorizationDelayModule != address(1)) {
+            emit DeauthorizationTimelockNotSet();
+        }
         authorizationDelayModule = Delay(_authorizationDelayModule);
         deauthorizationDelayModule = Delay(_deauthorizationDelayModule);
         authorizationManager = _authorizationManager;
+        authorizationMode = _authorizationMode;
 
         emit DelegatecallGuardSetup(
             _owner,
+            _authorizationMode,
             _authorizationManager,
             _authorizationDelayModule,
             _deauthorizationDelayModule
@@ -102,7 +129,7 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     function requestBatchAuthorization(
         address[] calldata _targets
     ) external onlyAuthorizationManager {
-        if (address(authorizationDelayModule) != address(0)) {
+        if (address(authorizationDelayModule) != address(1)) {
             // Prepare the data for the authorizationDelayModule to execute
             bytes memory data = abi.encodeWithSelector(
                 this.confirmBatchAuthorization.selector,
@@ -175,7 +202,7 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
     function requestBatchDeauthorization(
         address[] calldata _targets
     ) external onlyAuthorizationManager {
-        if (address(deauthorizationDelayModule) != address(0)) {
+        if (address(deauthorizationDelayModule) != address(1)) {
             // Prepare the data for the deauthorizationDelayModule to execute
             bytes memory data = abi.encodeWithSelector(
                 this.confirmBatchDeauthorization.selector,
@@ -258,10 +285,18 @@ contract DelegatecallGuard is IDelegatecallGuard, BaseGuard, FactoryFriendly {
         bytes memory signatures,
         address msgSender
     ) external view override {
-        if (operation == Enum.Operation.DelegateCall) {
+        bool isDelegateCall = operation == Enum.Operation.DelegateCall;
+        bool isCall = operation == Enum.Operation.Call;
+        if (
+            (authorizationMode == 0x3) ||
+            (isDelegateCall && (authorizationMode == 0x1)) ||
+            (isCall && (authorizationMode == 0x2))
+        ) {
             require(
                 authorizedAddresses[to],
-                "Target address not authorized for delegatecall"
+                isDelegateCall
+                    ? "Target address not authorized for delegatecall"
+                    : "Target address not authorized for call"
             );
         }
         return;

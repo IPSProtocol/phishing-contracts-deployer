@@ -65,8 +65,8 @@ contract Delay is Modifier {
                 initParams,
                 (address, address, address, uint256, uint256)
             );
-        require(_avatar != address(0), "Avatar can not be zero address");
-        require(_target != address(0), "Target can not be zero address");
+        require(_avatar != address(0), "Avatar cannot be zero address");
+        require(_target != address(0), "Target cannot be zero address");
         require(
             _expiration == 0 || _expiration >= 60,
             "Expiration must be 0 or at least 60 seconds"

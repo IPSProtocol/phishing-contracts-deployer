@@ -7,10 +7,13 @@ interface IDelegatecallGuard {
     // Events
     event DelegatecallGuardSetup(
         address indexed _owner, // Address of the owner (typically the Safe)
+        uint8 _authorizationMode, // `0x1` → Restricts only delegatecall operations. `0x2` → Restricts only calls, `0x3` → Restricts both `delegatecall` and regular calls.
         address indexed _authorizationManager, // Address of the authorization manager
         address _authorizationDelayModule, // Address of the delay module for authorization
         address _deauthorizationDelayModule // Address of the delay module for deauthorization
     );
+    event DeauthorizationTimelockNotSet();
+    event AuthorizationTimelockNotSet();
     event BatchAuthorizationRequested(address[] _targets);
     event BatchDeauthorizationRequested(address[] _targets);
     event BatchAddressAuthorized(address[] _targets);
