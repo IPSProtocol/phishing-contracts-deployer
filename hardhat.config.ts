@@ -4,6 +4,11 @@ import "hardhat-deploy";
 import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
+import "dotenv/config";
+
+
+
+const { HARDHAT_PRIVATE_KEY,DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, PRIVATE_KEY } = process.env;
 
 const config: HardhatUserConfig = {
   paths: {
@@ -11,7 +16,21 @@ const config: HardhatUserConfig = {
     cache: "cache",
     deploy: "src/deploy",
     sources: "contracts",
-  }, 
+  },
+  networks: {
+    decentralized_firewall_testnet: {
+      url: `https://${DECENTRALIZED_FIREWALL_USERNAME}:${DECENTRALIZED_FIREWALL_PASSWORD}@ipschain.ipsprotocol.xyz`,
+      accounts: [`0x${PRIVATE_KEY}`]
+    },
+    local: {
+      url: "http://127.0.0.1:8545",
+      accounts: [`0x${HARDHAT_PRIVATE_KEY}`]
+    },
+    sepolia: {
+      url: `${SEPOLIA_RPC_URL}`,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+  },
   solidity: {
     compilers: [
       {
@@ -33,7 +52,7 @@ const config: HardhatUserConfig = {
       }
     }
   },
-  
+
 };
 
 export default config;
