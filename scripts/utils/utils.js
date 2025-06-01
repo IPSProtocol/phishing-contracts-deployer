@@ -1,6 +1,6 @@
 
 const fs = require('fs');
-
+PRIVATE_KEY = process.env.GETH_DEV_PK
 async function getWallet(hre) {
     const keystoreMode = checkEnvironmentVariables();
     const provider = ethers.provider
@@ -8,6 +8,9 @@ async function getWallet(hre) {
     let wallet;
     if (networkName == "hardhat" || networkName == "node") {
         [wallet] = await ethers.getSigners()
+    }
+    else if (networkName == "local") {
+        wallet = new ethers.Wallet(process.env.GETH_DEV_PK, provider);
     }
     else {
         wallet = await getAccounts(provider, keystoreMode)
