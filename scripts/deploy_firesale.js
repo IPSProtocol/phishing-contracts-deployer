@@ -73,9 +73,11 @@ async function main2() {
 const GETH_DEV_PK = process.env.GETH_DEV_PK;
 const CHAIN_ID = Number(process.env.CHAIN_ID || 1337);
 
-async function deployWithRawTransaction(bytecode, abi, args = []) {
+async function deployWithRawTransaction(contractName, bytecode, abi, args = []) {
     const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
     const wallet = new ethers.Wallet(GETH_DEV_PK, provider);
+    
+    console.log("wallet addr:", wallet.address);
 
     // ABI-encode constructor args
     const iface = new ethers.utils.Interface(abi);
@@ -84,7 +86,7 @@ async function deployWithRawTransaction(bytecode, abi, args = []) {
     const nonce = await wallet.getTransactionCount();
     const latestBlock = await provider.getBlock("latest");
     const baseFee = latestBlock.baseFeePerGas;
-    console.log("Base fee:", baseFee);
+
     const tx = {
         nonce,
         gasLimit: 3_000_000,
@@ -100,40 +102,51 @@ async function deployWithRawTransaction(bytecode, abi, args = []) {
     console.log("Broadcasted raw tx:", txHash);
 
     const receipt = await provider.waitForTransaction(txHash);
-    console.log("Contract deployed at:", receipt.contractAddress);
+    console.log(`Contract ${contractName} deployed at:`, receipt.contractAddress);
     return receipt.contractAddress;
 }
 
 async function main() {
+    const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
+    const wallet = new ethers.Wallet(process.env.GETH_DEV_PK, provider);
+    
+
     const artifacts = {
         WBTC: await hre.artifacts.readArtifact("WBTC"),
         WETH: await hre.artifacts.readArtifact("WETH"),
         FireSale: await hre.artifacts.readArtifact("FireSale"),
     };
 
-    const wbtcAddress = await deployWithRawTransaction(artifacts.WBTC.bytecode, artifacts.WBTC.abi);
-    const wethAddress = await deployWithRawTransaction(artifacts.WETH.bytecode, artifacts.WETH.abi);
+    const wbtcAddress = await deployWithRawTransaction("WBTC", artifacts.WBTC.bytecode, artifacts.WBTC.abi);
+    const wethAddress = await deployWithRawTransaction("WETH", artifacts.WETH.bytecode, artifacts.WETH.abi);
+    
+    const WBTC = await ethers.getContractAt("WBTC", wbtcAddress, wallet);
+    const WETH = await ethers.getContractAt("WETH", wethAddress, wallet);
+
+    const wbtcBalance = await getERC20Balance( wallet.address, WBTC)
+    console.log(`Signer wallet balance in WBTC: ${wbtcBalance}`)
+    const wethBalance = await getERC20Balance( wallet.address, WETH)
+    console.log(`Signer wallet balance in WETH: ${wethBalance}`)
+
     const fireSaleAddress = await deployWithRawTransaction(
+        "FireSale",
         artifacts.FireSale.bytecode,
         artifacts.FireSale.abi,
         [wbtcAddress, wethAddress]
     );
 
-    const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
-    const wallet = new ethers.Wallet(process.env.GETH_DEV_PK, provider);
 
-    const WBTC = await ethers.getContractAt("WBTC", wbtcAddress, wallet);
-    const WETH = await ethers.getContractAt("WETH", wethAddress, wallet);
 
-    const transferAmount = ethers.utils.parseUnits("1000", 18);
 
-    console.log(`Transferring 1000 WETH to FireSale...`);
-    await (await WETH.transfer(fireSaleAddress, transferAmount)).wait();
+    // const transferAmount = ethers.utils.parseUnits("1000", 18);
 
-    console.log(`Transferring 1000 WBTC to FireSale...`);
-    await (await WBTC.transfer(fireSaleAddress, transferAmount)).wait();
+    // console.log(`Transferring 1000 WETH to FireSale...`);
+    // await (await WETH.connect(wallet).transfer(fireSaleAddress, transferAmount)).wait();
 
-    console.log("✅ Done.");
+    // console.log(`Transferring 1000 WBTC to FireSale...`);
+    // await (await WBTC.connect(wallet).transfer(fireSaleAddress, transferAmount)).wait();
+
+    // console.log("✅ Done.");
 }
 
 async function getBalance(provider, address) {
@@ -144,6 +157,14 @@ async function getBalance(provider, address) {
     const balanceInEther = ethers.utils.formatEther(balance);
 
     return balanceInEther;
+}
+
+async function getERC20Balance(walletAddress, token) {
+    // Get the balance of the account
+    const balance = await token.balanceOf(walletAddress);
+
+
+    return balance;
 }
 
 
