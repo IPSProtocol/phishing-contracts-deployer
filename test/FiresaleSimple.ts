@@ -118,10 +118,10 @@ describe("FireSale Contract Tests", function () {
     });
 
     describe("Withdrawals", function () {
-           it("should allow the owner to withdraw ETH funds", async function () {
+        it("should allow the owner to withdraw ETH funds", async function () {
             const ethAmount = ethers.utils.parseEther("1.0");
             await addr2.sendTransaction({ to: fireSale.address, value: ethAmount });
-            
+
             await fireSale.withdrawFunds();
 
             expect(await ethers.provider.getBalance(fireSale.address)).to.equal(0);
