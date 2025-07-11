@@ -1,177 +1,165 @@
-const hre = require("hardhat");
+// Load environment variables from .env file
+require('dotenv').config();
+const { ethers, artifacts } = require("hardhat");
 
-async function main2() {
-    const [signer_hardhat, signer_geth] = await hre.ethers.getSigners(); // get a signer
-    console.log(`Signer Hardhat address: ${signer_hardhat.address}`)
-    console.log(`Signer Geth address: ${signer_geth.address}`)
-    return;
-    // Get the contract instances properly
-    const weth = await hre.ethers.getContractAt("WETH", "0xB581C9264f59BF0289fA76D61B2D0746dCE3C30D", signer);
-    const wbtc = await hre.ethers.getContractAt("WBTC", "0x73511669fd4dE447feD18BB79bAFeAC93aB7F31f", signer);
-    const fireSale = await hre.ethers.getContractAt("FireSale", "0xC469e7aE4aD962c30c7111dc580B4adbc7E914DD", signer);
-
-    const transferAmount = hre.ethers.utils.parseUnits("1000", 18); // 18 decimals
-
-    await wbtc.transfer(fireSale.address, transferAmount);
-    console.log(`Transferred ${transferAmount.toString()} WBTC to FireSale contract.`);
+let PRIVATE_KEY;
+if (process.env.GETH_DEV_PK!==undefined){
+    PRIVATE_KEY = process.env.GETH_DEV_PK;
 }
-// async function main() {
-//     // Get the contract factories
-//     const WBTCFactory = await hre.ethers.getContractFactory("WBTC");
-//     const WETHFactory = await hre.ethers.getContractFactory("WETH");
-//     const FireSaleFactory = await hre.ethers.getContractFactory("FireSale");
+else{
+    PRIVATE_KEY = process.env.PRIVATE_KEY;
+}
+const RPC_URL = process.env.RPC_URL;
+const CHAIN_ID = Number(1337);
 
-//     const [signer_hardhat, signer_geth] = await hre.ethers.getSigners(); // get a signer
-//     console.log(`Signer Hardhat address: ${signer_hardhat.address}`)
-//     console.log(`Signer Geth address: ${signer_geth.address}`)
-//     const signer_geth_balance = await getBalance(hre.ethers.provider, signer_geth.address)
-//     const signer_hardhat_balance = await getBalance(hre.ethers.provider, signer_hardhat.address)
-//     let signer;
-//     if (signer_geth_balance == 0 && signer_hardhat_balance == 0) {
-//         console.error("No balance found for either signer")
-//         return;
-//     }
-//     if (signer_geth_balance > signer_hardhat_balance) {
-//         signer = signer_geth;
-//     } else {
-//         signer = signer_hardhat;
-//     }    
-//     console.log(`Using signer: ${signer.address}`)
-//     console.log(`Signer balance: ${await getBalance(hre.ethers.provider, signer.address)}`)
+/**
+ * Deploys a contract using a raw transaction.
+ * @param {string} contractName - The name of the contract for logging.
+ * @param {ethers.Wallet} wallet - The wallet to sign and send the transaction.
+ * @param {string} bytecode - The contract bytecode.
+ * @param {Array} abi - The contract ABI.
+ * @param {Array} [args=[]] - The constructor arguments.
+ * @returns {Promise<string>} The address of the deployed contract.
+ */
+async function deployContract(contractName, wallet, bytecode, abi, args = []) {
+    console.log(`Deploying ${contractName}...`);
 
-//     // Deploy WBTC
-//     console.log("Deploying WBTC...");
-//     const wbtc = await WBTCFactory.connect(signer).deploy();
-//     console.log("WBTC deployed to:", wbtc.deployTransaction.hashs);
-//     await wbtc.deployed();
-//     console.log("WBTC deployed to:", wbtc.address);
-
-//     // Deploy WETH
-//     console.log("Deploying WETH...");
-//     const weth = await WETHFactory.connect(signer).deploy();
-//     await weth.deployed();
-//     console.log("WETH deployed to:", weth.address);
-
-//     // Deploy FireSale with WETH and WBTC addresses
-//     console.log("Deploying FireSale...");
-//     const fireSale = await FireSaleFactory.connect(signer).deploy(wbtc.address, weth.address);
-//     await fireSale.deployed();
-//     console.log("FireSale deployed to:", fireSale.address);
-
-//     // Transfer 1000 WETH to the FireSale contract
-//     const transferAmount = hre.ethers.utils.parseUnits("1000", 18); // Assuming 18 decimals for WETH
-
-//     await weth.connect(signer).transfer(fireSale.address, transferAmount);
-//     console.log(`Transferred ${transferAmount.toString()} WETH to FireSale contract.`);
-
-//     await wbtc.connect(signer).transfer(fireSale.address, transferAmount);
-//     console.log(`Transferred ${transferAmount.toString()} WBTC to FireSale contract.`);
-
-// }
-
-
-const GETH_DEV_PK = process.env.GETH_DEV_PK;
-const CHAIN_ID = Number(process.env.CHAIN_ID || 1337);
-
-async function deployWithRawTransaction(contractName, bytecode, abi, args = []) {
-    const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
-    const wallet = new ethers.Wallet(GETH_DEV_PK, provider);
-    
-    console.log("wallet addr:", wallet.address);
-
-    // ABI-encode constructor args
     const iface = new ethers.utils.Interface(abi);
     const deployData = bytecode + iface.encodeDeploy(args).slice(2);
 
-    const nonce = await wallet.getTransactionCount();
-    const latestBlock = await provider.getBlock("latest");
-    const baseFee = latestBlock.baseFeePerGas;
+    const nonce = await wallet.getTransactionCount("latest");
+    const { baseFeePerGas } = await wallet.provider.getBlock("latest");
 
     const tx = {
         nonce,
-        gasLimit: 3_000_000,
-        maxFeePerGas: baseFee.mul(2), // safe buffer
+        gasLimit: 4000000, // Increased gas limit for safety
+        maxFeePerGas: baseFeePerGas.mul(2),
         maxPriorityFeePerGas: ethers.utils.parseUnits("2", "gwei"),
         data: deployData,
         type: 2,
-        chainId: CHAIN_ID
+        chainId: CHAIN_ID,
     };
 
-    const signed = await wallet.signTransaction(tx);
-    const txHash = await provider.send("eth_sendRawTransaction", [signed]);
-    console.log("Broadcasted raw tx:", txHash);
+    try {
+        const signedTx = await wallet.signTransaction(tx);
+        const txHash = await wallet.provider.send("eth_sendRawTransaction", [signedTx]);
+        console.log(`  > Broadcasted raw transaction: ${txHash}`);
 
-    const receipt = await provider.waitForTransaction(txHash);
-    console.log(`Contract ${contractName} deployed at:`, receipt.contractAddress);
-    return receipt.contractAddress;
+        const receipt = await wallet.provider.waitForTransaction(txHash, 1);
+        if (receipt.status === 0) {
+            throw new Error(`Transaction failed: ${txHash}`);
+        }
+        console.log(`  > Contract ${contractName} deployed at: ${receipt.contractAddress}`);
+        return receipt.contractAddress;
+    } catch (error) {
+        console.error(`Failed to deploy ${contractName}:`, error);
+        throw error; // Re-throw to stop the script
+    }
+}
+
+/**
+ * Gets the formatted ERC20 balance of an address.
+ * @param {ethers.Contract} tokenContract - The ERC20 token contract instance.
+ * @param {string} address - The address to check the balance of.
+ * @param {number} [decimals=18] - The number of decimals the token uses.
+ * @returns {Promise<string>} The formatted balance as a string.
+ */
+async function getFormattedERC20Balance(tokenContract, address, decimals = 18) {
+    const balance = await tokenContract.balanceOf(address);
+    return ethers.utils.formatUnits(balance, decimals);
 }
 
 async function main() {
-    const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
-    const wallet = new ethers.Wallet(process.env.GETH_DEV_PK, provider);
-    
+    console.log("Starting FireSale Deployment Script");
 
-    const artifacts = {
-        WBTC: await hre.artifacts.readArtifact("WBTC"),
-        WETH: await hre.artifacts.readArtifact("WETH"),
-        FireSale: await hre.artifacts.readArtifact("FireSale"),
+    // 1. Validate Environment Configuration
+    if (!PRIVATE_KEY || !RPC_URL) {
+        console.error("Missing environment variables. Please set PRIVATE_KEY and RPC_URL in your .env file.");
+        process.exit(1);
+    }
+
+    // 2. Setup Provider and Wallet
+    const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+    const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+    console.log(`Deploying contracts with wallet: ${wallet.address}`);
+    const walletBalance = await provider.getBalance(wallet.address);
+    console.log(`Wallet ETH balance: ${ethers.utils.formatEther(walletBalance)} ETH`);
+
+    if (walletBalance.isZero()) {
+        console.error("Wallet has no ETH for gas. Please fund the deployer wallet.");
+        process.exit(1);
+    }
+
+    // 3. Read Contract Artifacts
+    console.log("Reading contract artifacts...");
+    const contractArtifacts = {
+        WBTC: await artifacts.readArtifact("WBTC"),
+        WETH: await artifacts.readArtifact("WETH"),
+        FireSale: await artifacts.readArtifact("FireSale"),
     };
 
-    const wbtcAddress = await deployWithRawTransaction("WBTC", artifacts.WBTC.bytecode, artifacts.WBTC.abi);
-    const wethAddress = await deployWithRawTransaction("WETH", artifacts.WETH.bytecode, artifacts.WETH.abi);
+    // 4. Deploy Token Contracts
+    console.log("Deploying token contracts...");
+    const wbtcAddress = await deployContract("WBTC", wallet, contractArtifacts.WBTC.bytecode, contractArtifacts.WBTC.abi);
+    const wethAddress = await deployContract("WETH", wallet, contractArtifacts.WETH.bytecode, contractArtifacts.WETH.abi);
+
+    const WBTC = new ethers.Contract(wbtcAddress, contractArtifacts.WBTC.abi, wallet);
+    const WETH = new ethers.Contract(wethAddress, contractArtifacts.WETH.abi, wallet);
+
+    // 5. Mint Tokens to Deployer Wallet
+    // NOTE: This assumes your token contracts have a `mint(address, amount)` function
+    // that the deployer wallet is authorized to call.
+    console.log("Minting initial supply of tokens to deployer...");
+    const mintAmount = ethers.utils.parseUnits("10000", 18); // Mint 10,000 of each
     
-    const WBTC = await ethers.getContractAt("WBTC", wbtcAddress, wallet);
-    const WETH = await ethers.getContractAt("WETH", wethAddress, wallet);
-
-    const wbtcBalance = await getERC20Balance( wallet.address, WBTC)
-    console.log(`Signer wallet balance in WBTC: ${wbtcBalance}`)
-    const wethBalance = await getERC20Balance( wallet.address, WETH)
-    console.log(`Signer wallet balance in WETH: ${wethBalance}`)
-
-    const fireSaleAddress = await deployWithRawTransaction(
+    console.log(`Minting ${ethers.utils.formatUnits(mintAmount, 18)} WBTC...`);
+    await (await WBTC.mint(wallet.address, mintAmount)).wait();
+    
+    console.log(`Minting ${ethers.utils.formatUnits(mintAmount, 18)} WETH...`);
+    await (await WETH.mint(wallet.address, mintAmount)).wait();
+    
+    console.log("Tokens minted successfully.");
+    console.log(`> Deployer WBTC Balance: ${await getFormattedERC20Balance(WBTC, wallet.address)}`);
+    console.log(`> Deployer WETH Balance: ${await getFormattedERC20Balance(WETH, wallet.address)}`);
+    
+    // 6. Deploy FireSale Contract
+    console.log("Deploying FireSale contract...");
+    const fireSaleAddress = await deployContract(
         "FireSale",
-        artifacts.FireSale.bytecode,
-        artifacts.FireSale.abi,
+        wallet,
+        contractArtifacts.FireSale.bytecode,
+        contractArtifacts.FireSale.abi,
         [wbtcAddress, wethAddress]
     );
 
+    // 7. Fund FireSale Contract with Initial Liquidity
+    console.log("Funding FireSale contract with initial liquidity...");
+    const liquidityAmount = ethers.utils.parseUnits("1000", 18); // Send 1,000 of each
 
+    console.log(`Transferring ${ethers.utils.formatUnits(liquidityAmount, 18)} WBTC to FireSale...`);
+    await (await WBTC.transfer(fireSaleAddress, liquidityAmount)).wait();
 
+    console.log(`Transferring ${ethers.utils.formatUnits(liquidityAmount, 18)} WETH to FireSale...`);
+    await (await WETH.transfer(fireSaleAddress, liquidityAmount)).wait();
 
-    // const transferAmount = ethers.utils.parseUnits("1000", 18);
-
-    // console.log(`Transferring 1000 WETH to FireSale...`);
-    // await (await WETH.connect(wallet).transfer(fireSaleAddress, transferAmount)).wait();
-
-    // console.log(`Transferring 1000 WBTC to FireSale...`);
-    // await (await WBTC.connect(wallet).transfer(fireSaleAddress, transferAmount)).wait();
-
-    // console.log("✅ Done.");
+    // 8. Final Verification
+    console.log("Verifying final contract state...");
+    const fireSaleWbtcBalance = await getFormattedERC20Balance(WBTC, fireSaleAddress);
+    const fireSaleWethBalance = await getFormattedERC20Balance(WETH, fireSaleAddress);
+    console.log(`> FireSale WBTC Balance: ${fireSaleWbtcBalance}`);
+    console.log(`> FireSale WETH Balance: ${fireSaleWethBalance}`);
+    
+    if (parseFloat(fireSaleWbtcBalance) === 1000.0 && parseFloat(fireSaleWethBalance) === 1000.0) {
+        console.log("Deployment and setup completed successfully!");
+    } else {
+        console.warn("Warning: Final balances on FireSale contract do not match expected liquidity.");
+    }
 }
-
-async function getBalance(provider, address) {
-    // Get the balance of the account
-    const balance = await provider.getBalance(address);
-
-    // Convert the balance from wei to ether
-    const balanceInEther = ethers.utils.formatEther(balance);
-
-    return balanceInEther;
-}
-
-async function getERC20Balance(walletAddress, token) {
-    // Get the balance of the account
-    const balance = await token.balanceOf(walletAddress);
-
-
-    return balance;
-}
-
 
 // Execute the deployment script
 main()
     .then(() => process.exit(0))
     .catch((error) => {
-        console.error(error);
+        console.error("An unexpected error occurred:", error);
         process.exit(1);
     });

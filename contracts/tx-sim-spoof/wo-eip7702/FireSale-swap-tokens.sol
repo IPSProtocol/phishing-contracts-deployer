@@ -10,6 +10,7 @@ contract FireSale {
     bool public fireSale;
     uint ethPerBtc = 20;
 
+
     event WETHPurchased(address indexed buyer, address assetName, uint amount);
     event WBTCpurchased(address indexed buyer, address assetName, uint amount);
     event DonationReceived(address indexed donor, uint amount);

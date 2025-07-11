@@ -1,172 +1,191 @@
+/**
+ * @fileoverview This file contains utility functions for deployment scripts,
+ * including wallet/provider setup, contract deployment, and transaction analysis.
+ * It is designed to be used in Hardhat scripts.
+ */
 
+// Load environment variables from a .env file into process.env
+require('dotenv').config();
+const { ethers } = require('hardhat');
 const fs = require('fs');
-PRIVATE_KEY = process.env.GETH_DEV_PK
-async function getWallet(hre) {
-    const keystoreMode = checkEnvironmentVariables();
-    const provider = ethers.provider
-    const networkName = hre.network.name;
-    let wallet;
-    if (networkName == "hardhat" || networkName == "node") {
-        [wallet] = await ethers.getSigners()
-    }
-    else if (networkName == "local") {
-        wallet = new ethers.Wallet(process.env.GETH_DEV_PK, provider);
-    }
-    else {
-        wallet = await getAccounts(provider, keystoreMode)
-    }
 
-    return wallet
-}
-function checkEnvironmentVariables() {
-    // Check if .env file exists
-    if (!fs.existsSync(".env")) {
-        console.error("Error: .env file is missing. Please create a .env file with the required environment variables.");
-        process.exit(1); // Exit with a failure code
-    }
-    keystoreMode = false;
-    const {
-        KEYSTORE_PATH,
-        KEYSTORE_PASSWORD,
-        PRIVATE_KEY,
-        DECENTRALIZED_FIREWALL_USERNAME,
-        DECENTRALIZED_FIREWALL_PASSWORD,
-        SEPOLIA_RPC_URL,
-    } = process.env;
+// --- Wallet & Provider Setup ---
+
+/**
+ * Initializes and returns an ethers Wallet instance based on the environment configuration.
+ * It supports using a private key or an encrypted keystore file.
+ *
+ * @param {ethers.providers.Provider} provider - The ethers provider to connect the wallet to.
+ * @returns {Promise<ethers.Wallet>} A promise that resolves to the configured wallet instance.
+ * @throws {Error} If wallet configuration (private key or keystore) is missing.
+ */
+async function initializeWallet(provider) {
+    const { KEYSTORE_PATH, KEYSTORE_PASSWORD, GETH_DEV_PK } = process.env;
 
     if (KEYSTORE_PATH && KEYSTORE_PASSWORD) {
-        console.log("Keystore is properly configured.");
-        keystoreMode = true;
-    } else {
-        console.log(
-            "Keystore configuration is incomplete. both KEYSTORE_PATH and KEYSTORE_PASSWORD are required."
-        );
-
-        if (PRIVATE_KEY) {
-            console.log("Private key is set and will be used instead.");
-            keystoreMode = false;
-        } else {
-            console.error(
-                "Neither keystore configuration nor private key is set. Please configure the environment variables properly for using Decentralized Firewall Network."
-            );
-            process.exit(1); // Exit with a failure code
-        }
-    }
-
-    // Additional logging for other required variables
-    if (!DECENTRALIZED_FIREWALL_USERNAME || !DECENTRALIZED_FIREWALL_PASSWORD) {
-        console.error(
-            "Missing credentials for the Decentralized Firewall. Ensure DECENTRALIZED_FIREWALL_USERNAME and DECENTRALIZED_FIREWALL_PASSWORD are set."
-        );
-    }
-
-    if (!SEPOLIA_RPC_URL) {
-        console.error("Missing SEPOLIA_RPC_URL. Ensure it is set in the environment.");
-    }
-    return keystoreMode;
-}
-
-
-
-async function logWalletDetails(wallet, provider) {
-    console.log("1 - Wallet Details")
-    console.log("________________________\n")
-    console.log(`Wallet address: ${await wallet.address} - Balance: ${await provider.getBalance(wallet.address)} `);
-    console.log("________________________")
-    console.log("")
-    console.log("2 - Contracts Details")
-    console.log("________________________\n")
-
-}
-
-async function getAccounts(provider, keystoreMode) {
-    let projectWallet;
-    if (keystoreMode) {
-        projectWallet = await loadWalletFromKeystore(process.env.KEYSTORE_PATH)
-        projectWallet = await projectWallet.connect(provider)
-    }
-    else {
-        projectWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-    }
-    return projectWallet
-
-
-}
-async function loadWalletFromKeystore(path) {
-    // Read the keystore file
-    const keystore = fs.readFileSync(path, 'utf8');
-
-    // Decrypt the keystore with the passworfd
-    const password = process.env.KEYSTORE_PASSWORD; // Make sure to keep this secure
-    const wallet = await ethers.Wallet.fromEncryptedJson(keystore, password);
-    return wallet
-}
-function logNewLines() {
-    console.log("________________________")
-    console.log("________________________")
-    console.log("")
-}
-async function DeployTransactionEventsLib(wallet) {
-    // Deploy  TransactionEvents library 
-    transactionEventsLib = await ethers.getContractFactory("TransactionEventsLib");
-    transactionEventsLib = await transactionEventsLib.connect(wallet).deploy()
-    await transactionEventsLib.waitForDeployment();
-
-    console.log(`Deployed TransactionEventsLib address: ${transactionEventsLib.target}`);
-    return transactionEventsLib
-
-}
-async function verifyFirewallContractSetup(provider, businesLogicERC20, vulnERC20FirewallContract) {
-    let value = await provider.getStorage(businesLogicERC20.target, "0xf5db7be7144a933071df54eb1557c996e91cbc47176ea78e1c6f39f9306cff5f")
-    value = value.slice(-40).toLowerCase();
-    let addr = vulnERC20FirewallContract.target.slice(-40).toLowerCase();
-    console.log(`is Firewall Contract Properly Setup: ${addr == value}`);
-    console.log(`Firewall contract set at 0xf5db7be7144a933071df54eb1557c996e91cbc47176ea78e1c6f39f9306cff5f has value: ${value}`);
-}
-async function getEmittedEvent(provider, txHash) {
-    // Fetch the transaction receipt
-    const receipt = await provider.getTransactionReceipt(txHash);
-    console.log(receipt)
-
-    // Log all events in the receipt
-    for (const log of receipt.logs) {
+        console.log('Initializing wallet from keystore...');
         try {
-            // Define the ABI for the NEWADDR event
-            const iface = new ethers.utils.Interface([
-                "event NEWADDR(address)"
-            ]);
-
-            // Decode the log using the ABI
-            const decodedLog = iface.parseLog(log);
-
-            if (decodedLog.name === "NEWADDR") {
-                console.log("NEWADDR Event Found!");
-                console.log(`Caller Address: ${decodedLog.args[0]}`);
-            }
-        } catch (err) {
-            // Ignore logs that don't match the NEWADDR event
+            const keystoreJson = fs.readFileSync(KEYSTORE_PATH, 'utf8');
+            const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, KEYSTORE_PASSWORD);
+            return wallet.connect(provider);
+        } catch (error) {
+            console.error(`Failed to load wallet from keystore at ${KEYSTORE_PATH}.`);
+            throw error;
         }
     }
+
+    if (GETH_DEV_PK) {
+        console.log('Initializing wallet from private key...');
+        return new ethers.Wallet(GETH_DEV_PK, provider);
+    }
+
+    throw new Error('Wallet configuration not found. Please set either GETH_DEV_PK or both KEYSTORE_PATH and KEYSTORE_PASSWORD in your .env file.');
 }
 
-async function deployContract(wallet, name, parameters) {
-    const Contract = await ethers.getContractFactory(name);
-    const contract = await Contract.connect(wallet).deploy(...parameters);
-    await contract.waitForDeployment();
+/**
+ * Sets up the provider and wallet for a deployment script.
+ * Handles different network configurations (local hardhat vs. live networks).
+ *
+ * @param {object} hre - The Hardhat Runtime Environment.
+ * @returns {Promise<{provider: ethers.providers.Provider, wallet: ethers.Wallet | ethers.Signer}>} An object containing the provider and wallet.
+ */
+async function setupProviderAndWallet(hre) {
+    const provider = hre.ethers.provider;
+    const networkName = hre.network.name;
 
-    console.log(`Deployed ${name} address: ${contract.target}`);
+    console.log(`\nSetting up for network: ${networkName}`);
+
+    if (networkName === 'hardhat' || networkName === 'localhost') {
+        const [signer] = await hre.ethers.getSigners();
+        console.log(`Using Hardhat signer: ${signer.address}`);
+        return { provider, wallet: signer };
+    }
+
+    const wallet = await initializeWallet(provider);
+    console.log(`Using wallet address: ${wallet.address}`);
+    
+    const balance = await provider.getBalance(wallet.address);
+    console.log(`Wallet balance: ${ethers.utils.formatEther(balance)} ETH`);
+
+    if (balance.isZero()) {
+        console.warn('Warning: The wallet has a zero balance. Transactions will likely fail.');
+    }
+
+    return { provider, wallet };
+}
+
+
+// --- Contract Deployment ---
+
+/**
+ * A generic function to deploy a smart contract.
+ *
+ * @param {object} options - The deployment options.
+ * @param {string} options.contractName - The name of the contract to deploy.
+ * @param {ethers.Wallet | ethers.Signer} options.wallet - The wallet to use for deployment.
+ * @param {Array} [options.args=[]] - The constructor arguments for the contract.
+ * @param {object} [options.libraries={}] - Linked libraries for the contract.
+ * @returns {Promise<ethers.Contract>} A promise that resolves to the deployed contract instance.
+ */
+async function deployContract({ contractName, wallet, args = [], libraries = {} }) {
+    console.log(`Deploying ${contractName}...`);
+
+    const ContractFactory = await ethers.getContractFactory(contractName, {
+        signer: wallet,
+        libraries,
+    });
+
+    const contract = await ContractFactory.deploy(...args);
+    await contract.deployed();
+
+    console.log(`  > ${contractName} deployed to: ${contract.address}`);
+    console.log(`  > Transaction hash: ${contract.deployTransaction.hash}`);
 
     return contract;
-
 }
 
-async function deployFirewall(wallet, name, transactionEventsLib) {
-    let FirewallContract = await ethers.getContractFactory(name, { libraries: { TransactionEventsLib: transactionEventsLib.target } });
-    firewallContract = await FirewallContract.connect(wallet).deploy()
-    await firewallContract.waitForDeployment()
 
-    console.log(`Deployed NFTFirewallContract address: ${firewallContract.target}`);
-    return firewallContract;
+// --- On-Chain Analysis & Verification ---
+
+/**
+ * Verifies that a contract address is stored at a specific storage slot in another contract.
+ * WARNING: This relies on a hardcoded storage slot layout, which can be brittle. Use with caution.
+ *
+ * @param {object} options - The verification options.
+ * @param {ethers.providers.Provider} options.provider - The ethers provider.
+ * @param {string} options.contractWithStorageAddress - The address of the contract to check the storage of.
+ * @param {string} options.expectedAddress - The address expected to be found in the storage slot.
+ * @param {string} options.storageSlot - The storage slot to read from.
+ * @returns {Promise<void>}
+ */
+async function verifyContractLinkAtStorageSlot({ provider, contractWithStorageAddress, expectedAddress, storageSlot }) {
+    console.log(`\nVerifying storage at slot ${storageSlot}...`);
+    const storedValue = await provider.getStorageAt(contractWithStorageAddress, storageSlot);
+
+    // Address is the last 20 bytes (40 hex characters) of the storage value
+    const storedAddress = `0x${storedValue.slice(-40)}`;
+    const isMatch = storedAddress.toLowerCase() === expectedAddress.toLowerCase();
+
+    if (isMatch) {
+        console.log(`  Success: Found expected address ${expectedAddress} at storage slot.`);
+    } else {
+        console.error(`  Failure: Mismatch at storage slot.`);
+        console.error(`    - Expected: ${expectedAddress}`);
+        console.error(`    - Found:    ${storedAddress}`);
+    }
 }
 
-module.exports = { deployFirewall, getWallet, getAccounts, logNewLines, DeployTransactionEventsLib, logWalletDetails, verifyFirewallContractSetup, getEmittedEvent, deployContract }
+/**
+ * Finds and parses a specific event from a transaction receipt.
+ *
+ * @param {object} options - The event finding options.
+ * @param {ethers.providers.TransactionReceipt} options.receipt - The transaction receipt to search within.
+ * @param {string} options.eventName - The name of the event to find.
+ * @param {ethers.utils.Interface} options.iface - The contract interface to use for parsing.
+ * @returns {ethers.utils.LogDescription | null} The parsed event log or null if not found.
+ */
+function findEventInReceipt({ receipt, eventName, iface }) {
+    for (const log of receipt.logs) {
+        try {
+            const parsedLog = iface.parseLog(log);
+            if (parsedLog.name === eventName) {
+                console.log(`\nFound '${eventName}' event:`);
+                console.log(parsedLog.args);
+                return parsedLog;
+            }
+        } catch (error) {
+            // Ignore logs that don't match the interface
+        }
+    }
+    console.log(`'${eventName}' event not found in transaction.`);
+    return null;
+}
+
+
+// --- Logging & Formatting ---
+
+/**
+ * A simple logger for creating formatted output in scripts.
+ */
+const logger = {
+    info: (message) => console.log(message),
+    success: (message) => console.log(`${message}`),
+    error: (message) => console.error(`${message}`),
+    separator: () => console.log('\n' + '─'.repeat(50) + '\n'),
+    logWallet: async (wallet) => {
+        const address = await wallet.getAddress();
+        const balance = await wallet.getBalance();
+        console.log(`\n--- Wallet Details ---`);
+        console.log(`  Address: ${address}`);
+        console.log(`  Balance: ${ethers.utils.formatEther(balance)} ETH`);
+        console.log(`----------------------`);
+    }
+};
+
+module.exports = {
+    setupProviderAndWallet,
+    deployContract,
+    verifyContractLinkAtStorageSlot,
+    findEventInReceipt,
+    logger,
+};
