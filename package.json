@@ -9,9 +9,9 @@
     "smart contract deployer",
     "devtool"
   ],
-  "name": "sc-deployer",
+  "name": "phishing-sc-deployer",
   "version": "1.0.0",
-  "description": "hardhat project to deploy contracts",
+  "description": "hardhat project to deploy Demo Phishing contracts",
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",

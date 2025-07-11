@@ -18,18 +18,7 @@ const config: HardhatUserConfig = {
     sources: "contracts",
   },
   networks: {
-    decentralized_firewall_testnet: {
-      url: `https://${DECENTRALIZED_FIREWALL_USERNAME}:${DECENTRALIZED_FIREWALL_PASSWORD}@${DECENTRALIZED_FIREWALL_URL}`,
-      accounts: [`0x${PRIVATE_KEY}`]
-    },
-    local: {
-      url: "http://127.0.0.1:8545",
-      accounts: [`0x${HARDHAT_PRIVATE_KEY}`, `0x${GETH_DEV_PK}`]
-    },
-    sepolia: {
-      url: `${SEPOLIA_RPC_URL}`,
-      accounts: [process.env.PRIVATE_KEY!],
-    },
+    hardhat: {}
   },
   solidity: {
     compilers: [
@@ -44,9 +33,6 @@ const config: HardhatUserConfig = {
       }
     ],
     overrides: {
-      "@gnosis.pm/zodiac/contracts": {
-        version: "0.8.28"
-      },
       "@openzeppelin/contracts": {
         version: "0.8.28"
       }
@@ -54,5 +40,26 @@ const config: HardhatUserConfig = {
   },
 
 };
+
+if (DECENTRALIZED_FIREWALL_URL && PRIVATE_KEY) {
+  config.networks!.decentralized_firewall_testnet = {
+    url: `https://${DECENTRALIZED_FIREWALL_USERNAME || ''}:${DECENTRALIZED_FIREWALL_PASSWORD || ''}@${DECENTRALIZED_FIREWALL_URL}`,
+    accounts: [`0x${PRIVATE_KEY}`]
+  };
+}
+
+if (HARDHAT_PRIVATE_KEY && GETH_DEV_PK) {
+    config.networks!.local = {
+        url: "http://127.0.0.1:8545",
+        accounts: [`0x${HARDHAT_PRIVATE_KEY}`, `0x${GETH_DEV_PK}`]
+    };
+}
+
+if (SEPOLIA_RPC_URL && PRIVATE_KEY) {
+    config.networks!.sepolia = {
+        url: SEPOLIA_RPC_URL,
+        accounts: [`0x${PRIVATE_KEY}`],
+    };
+}
 
 export default config;
