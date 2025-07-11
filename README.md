@@ -1,126 +1,109 @@
-# DelegateCall Guard
+# IPS Protocol: Proof-of-Concept Contract Deployer
 
-[![Build Status](https://github.com/theexoticman/zodiac-delegatecall-guard/actions/workflows/ci.yaml/badge.svg)](https://github.com/theexoticman/zodiac-delegatecall-guard/actions/workflows/ci.yaml/)
-
+> **⚠️ WARNING: FOR EDUCATIONAL & RESEARCH USE ONLY ⚠️**
+>
+> The smart contracts in this repository are intentionally designed with vulnerabilities for security research and proof-of-concept demonstrations. **DO NOT deploy them on any mainnet or use them with real funds.** The authors are not responsible for any misuse or loss of assets.
 
 ## Overview
 
-The DelegateCall Guard is a Zodiac Custom Guard that secures Safe Wallets by restricting delegatecall (and/or call) operations to pre-authorized contract addresses, preventing unintended or malicious code execution while preserving Safe’s flexibility.
+This repository contains a Hardhat project for deploying and interacting with various proof-of-concept (PoC) smart contracts that simulate common vulnerabilities or flawed logic. It is maintained by IPS Protocol for educational, research, and demonstration purposes.
 
-Authorization can be managed by the Safe itself, a designated role within a modifier entity, or an external governance structure. The Guard also integrates with the Zodiac Delay Module, offering an optional timelock to allow stakeholders time to monitor, review, and counter potential threats such as phishing attacks (address poisoning, clipboard hijacking) or misconfigurations.
-
-Since delegatecall enables Safe wallets to execute external contract logic within the Safe Account context, strict authorization is essential to prevent asset mismanagement, fund lockups, scams, or exploits.
-
-The DelegateCall Guard is an ideal solution for DAOs and teams looking to enforce stricter delegatecall controls without sacrificing Safe’s flexibility. 🚀
-
-### Why Restricting Delegatecall Matters
-
-Allowing unrestricted delegate calls exposes wallets to security risks, including:
-
-- Full access to all assets managed by the wallet — including ETH, tokens, and any other crypto assets held by the Safe.
-- Impersonation — any action performed by a contract called via `delegatecall` is executed as if the Safe itself performed it, inheriting the Safe’s address and permissions. This can also include emitting fake events, making malicious actions appear legitimate.
-- Silent corruption or modification of the Safe’s storage and logic — changes can be made directly to the Safe’s internal storage and contract logic without leaving any trace in the Safe’s transaction history, and with no automatic alerts to stakeholders.
-
-By enforcing controlled access to `delegatecall`, the DelegateCall Guard mitigates these risks, ensuring only trusted contracts can execute code on behalf of the Safe.
-
-
----
+The primary example included is a `FireSale` contract that demonstrates a simple but flawed token swap mechanism, along with mock ERC20 tokens for testing.
 
 ## Features
 
-### Authorization List For Delegatecall and Call
-This Guard ensures that the Safe can only execute `delegatecall` and/or call operations to contracts that have been explicitly authorized in advance.
+- **Vulnerable `FireSale` Contract**: A simple DEX contract with intentional design flaws for analysis.
+- **Mock ERC20 Tokens**: `WBTC` and `WETH` contracts for easy testing and interaction.
+- **Scripted Deployment**: A clean, configurable deployment script located in `scripts/deploy_firesale.js`.
+- **Hardhat Environment**: Fully configured for local testing, compilation, and deployment.
+- **CI/CD Pipeline**: Includes a GitHub Actions workflow to automatically run tests on pushes and pull requests to `main`, ensuring code integrity.
 
-Safe users can authorize multiple addresses in a single transaction, streamlining the setup process.
+## Project Structure
 
-To choose which transactions should be verified, make sure to use the Authorization Mode that best suits your needs.
+- **/contracts**: Contains all Solidity source code for the PoC contracts.
+- **/scripts**: Includes deployment and utility scripts.
+- **/test**: Test suite for ensuring contract functionality (and vulnerabilities) are working as expected.
+- **hardhat.config.js**: Hardhat configuration file.
+- **.github/workflows**: Continuous Integration workflow definitions.
 
-### Flexibility & Customization
-Users can fully customize the module, choosing:
-- Who manages authorizations (Safe, external entity, or role-based access).  
-- Whether one or two delay module should be enforced for additional security.
-- Whether the authorization list applies strictly to `delegatecall` or extends to all `call` operations for broader protection.  
+## Getting Started
 
-###  Governance
-Flexibility to manage `delegatecall` authorizations with the user entity of choosing.
+### Prerequisites
 
-###  Timelock using Zodiac Delay Modifier
-- Modular setup:  
-  - Users can apply different delay modules for each process.  
-  - The same module can be used for both flows.
-  - User can remove the timelock by setting the Delay Module to the one address `0x1`.  
-- Custom cooldown periods:  
-  - Longer delays for authorizations to allow proper review.  
-  - Shorter or instant deauthorization to enable immediate revocation if a contract is compromised.  
+- [Node.js](https://nodejs.org/) (v18 or later recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
-
-###  Easy Setup
-Seamlessly import all existing delegatecall modules currently used by your Safe, and authorize them in a single batch transaction — minimizing setup friction and simplifying the onboarding process.
-
-###  Enable Observability & Incident Response
-The Delay Module enforces a mandatory timelock on new authorizations, giving Safe owners — through monitoring tools — the time to review and respond to any suspicious changes before they take effect.
-
-###  Compatible with Latest Safe Wallet
-This Guard is fully compatible with the latest version of Safe Wallet and integrates directly into the Zodiac framework, ensuring seamless adoption for DAOs and teams already using Safe.
-
-Also Compatible with Metaguard. 
-
-
----
-
-## Guard Configuration  
-To deploy the DelegateCall Guard, the following parameters are required:  
-
-- Owner – The Safe wallet that will enforce the authorization list.  
-- Authorization Manager – The address responsible for managing the authorization list. The Safe itself can be set as the manager, but this is not a restriction.  
-
-
-### Authorization Mode
-
-Set the authorization mode to `1` if you only want delegate call operations to be checked against the authorization list.
-
-Set the authorization mode to `2` if you only want call operations to be checked against the authorization list.
-
-Set the authorization mode to `3` if you want both delegate call and call operations to be checked against the authorization list.
-
-
-### Timelock Configuration  
-Users can configure timelocks for both authorization and deauthorization using the Zodiac Delay Module:  
-- Authorization Delay Module – Defines the cooldown period before new delegatecall authorizations take effect.  
-- Deauthorization Delay Module – Defines the cooldown period before removing a delegatecall authorization.  
-
-These delay modules can be configured independently:  
-- They can have different cooldown periods for authorizations and deauthorizations.  
-- The same delay module can be used for both.  
-- Delay enforcement can be disabled by setting the delay module address to `address(1)`.  
-
-⚠ Security Recommendation: It is strongly advised to use an authorization delay module to prevent immediate changes that could introduce risks.  
-
-
-## Guard Operational Configuration  
-
-To activate the Guard on an existing Safe, users must enable it by calling the `setGuard` function.  
-
-In case you decide to use one or more Delay Modules, you need to enable the guard on these contracts.
-
-Additionally, the Delay Modules should be authorized in the Authorization Manager, as they execute transactions via the execTransactionFromModule function from the contract.
-
----
-
-This Guard aims to balance security with simplicity, enabling DAOs and project teams to protect their Safes from high-impact delegatecall risks without introducing excessive constraints or operational complexity.
-
-Contributions, feedback, and feature requests are warmly welcomed.
-
-
-## Scripts
+### 1. Clone the Repository
 
 ```bash
-# Install dependencies
-npm install
+git clone <your-repository-url>
+cd <repository-directory>
+```
 
-# Run tests
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure Your Environment
+
+Create a `.env` file in the project root. You can copy the example file to get started:
+
+```bash
+cp .env.example .env
+```
+
+Now, edit the `.env` file and fill in the required variables:
+
+```env
+# The private key of the wallet you want to use for deployment.
+# On a local Hardhat node, you can use one of the default keys provided when you start the node.
+GETH_DEV_PK=your_private_key_here
+
+# The RPC URL of the network you want to deploy to.
+# This defaults to the standard local Hardhat node URL.
+RPC_URL=http://127.0.0.1:8545
+
+# The Chain ID of the network.
+CHAIN_ID=1337
+```
+
+## Available Scripts
+
+### Run a Local Blockchain Node
+
+For testing, you can start a local Hardhat node in a separate terminal. This will also provide you with a list of funded accounts and private keys you can use in your `.env` file.
+
+```bash
+npx hardhat node
+```
+
+### Compile the Contracts
+
+```bash
+npx hardhat compile
+```
+
+### Run Tests
+
+This command will run the entire test suite located in the `/test` directory.
+
+```bash
 npm test
 ```
 
-# Security and Liability
-All contracts are WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+### Deploy Contracts
+
+To deploy the contracts to your configured network (e.g., the local node), run the deployment script:
+
+```bash
+# The '--network local' flag corresponds to the 'local' network defined in hardhat.config.js
+npx hardhat run scripts/deploy_firesale.js --network local
+```
+
+## Security and Liability
+
+All contracts and scripts are provided "as is" and "with all faults," WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+This project is strictly for educational and security research purposes. The creators and contributors are not liable for any damages or losses arising from the use or misuse of this code. **Do not use this with real assets.**
