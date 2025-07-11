@@ -46,4 +46,7 @@ contract FireSale {
         (bool success, ) = payable(owner).call{value: address(this).balance}("");
         require(success, "ETH_TRANSFER_FAILED");
     }
+
+    receive() external payable {
+    }
 }

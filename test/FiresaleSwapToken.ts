@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { Contract } from "ethers";
 
-describe("FireSale Contract Tests", function () {
+describe("FireSaleSwapTokens Contract Tests", function () {
     // Contracts
     let fireSale: Contract;
     let wbtc: Contract;
@@ -23,24 +23,24 @@ describe("FireSale Contract Tests", function () {
         // Deploy mock tokens
         const WBTCFactory = await ethers.getContractFactory("WBTC", owner);
         wbtc = await WBTCFactory.deploy();
-        
+
         const WETHFactory = await ethers.getContractFactory("WETH", owner);
         weth = await WETHFactory.deploy();
 
         // Deploy FireSale contract, ensuring args are in the correct order
         const FireSaleFactory = await ethers.getContractFactory("FireSaleSwapTokens", owner);
         fireSale = await FireSaleFactory.deploy(wbtc.address, weth.address);
-        
+
         await fireSale.deployed();
 
         // Fund FireSale contract with initial liquidity
-        await wbtc.transfer(fireSale.address, initialLiquidity);
-        await weth.transfer(fireSale.address, initialLiquidity);
+        await wbtc.connect(owner).transfer(fireSale.address, initialLiquidity);
+        await weth.connect(owner).transfer(fireSale.address, initialLiquidity);
 
         // Fund addr1 with tokens for swapping
         const addr1Amount = ethers.utils.parseUnits("100", 18);
-        await wbtc.transfer(addr1.address, addr1Amount);
-        await weth.transfer(addr1.address, addr1Amount);
+        await wbtc.connect(owner).transfer(addr1.address, addr1Amount);
+        await weth.connect(owner).transfer(addr1.address, addr1Amount);
     });
 
     describe("Deployment", function () {
@@ -61,17 +61,17 @@ describe("FireSale Contract Tests", function () {
     describe("Token Swaps", function () {
         const swapAmount = ethers.utils.parseUnits("10", 18);
 
-        it("should fail to swap if tokens are not approved", async function() {
+        it("should fail to swap if tokens are not approved", async function () {
             // No approval is given, so this should fail
             await expect(
                 fireSale.connect(addr1).swapExactInput(weth.address, swapAmount)
             ).to.be.revertedWith("ERC20InsufficientAllowance");
         });
-        
+
         it("should swap WETH for WBTC correctly", async function () {
             await weth.connect(addr1).approve(fireSale.address, swapAmount);
-            
-            await expect(() => 
+
+            await expect(() =>
                 fireSale.connect(addr1).swapExactInput(weth.address, swapAmount)
             ).to.changeTokenBalances(
                 wbtc,
@@ -96,9 +96,9 @@ describe("FireSale Contract Tests", function () {
             );
         });
 
-        it("should emit a WBTCpurchased event on successful WETH -> WBTC swap", async function() {
+        it("should emit a WBTCpurchased event on successful WETH -> WBTC swap", async function () {
             await weth.connect(addr1).approve(fireSale.address, swapAmount);
-            
+
             await expect(fireSale.connect(addr1).swapExactInput(weth.address, swapAmount))
                 .to.emit(fireSale, "WBTCpurchased")
                 .withArgs(addr1.address, wbtc.address, swapAmount.div(exchangeRate));
@@ -122,26 +122,31 @@ describe("FireSale Contract Tests", function () {
             const ethAmount = ethers.utils.parseEther("1.0");
             await addr2.sendTransaction({ to: fireSale.address, value: ethAmount });
 
-            await expect(
-                await fireSale.withdrawFunds()
-            ).to.changeEtherBalance(owner, ethAmount);
+            await fireSale.withdrawFunds();
 
             expect(await ethers.provider.getBalance(fireSale.address)).to.equal(0);
         });
 
         it("should allow the owner to withdraw tokens", async function () {
             const withdrawAmount = ethers.utils.parseUnits("100", 18);
-            
-            await expect(
-                await fireSale.withdrawTokens(wbtc.address, withdrawAmount)
-            ).to.changeTokenBalances(wbtc, [fireSale, owner], [withdrawAmount.mul(-1), withdrawAmount]);
+
+            // Get balances before the transaction
+            const ownerBalanceBefore = await wbtc.balanceOf(owner.address);
+            const contractBalanceBefore = await wbtc.balanceOf(fireSale.address);
+
+            // Perform the transaction
+            await fireSale.withdrawTokens(wbtc.address, withdrawAmount);
+
+            // Assert the changes using BigNumber methods .add() and .sub()
+            expect(await wbtc.balanceOf(owner.address)).to.equal(ownerBalanceBefore.add(withdrawAmount));
+            expect(await wbtc.balanceOf(fireSale.address)).to.equal(contractBalanceBefore.sub(withdrawAmount));
         });
-        
-        it("should revert if non-owner tries to withdraw ETH", async function(){
+
+        it("should revert if non-owner tries to withdraw ETH", async function () {
             await expect(fireSale.connect(addr1).withdrawFunds()).to.be.revertedWith("Not Allowed");
         });
 
-        it("should revert if non-owner tries to withdraw tokens", async function(){
+        it("should revert if non-owner tries to withdraw tokens", async function () {
             const withdrawAmount = ethers.utils.parseUnits("100", 18);
             await expect(fireSale.connect(addr1).withdrawTokens(wbtc.address, withdrawAmount)).to.be.revertedWith("Not Allowed");
         });

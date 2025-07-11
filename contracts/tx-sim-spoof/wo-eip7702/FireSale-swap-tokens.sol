@@ -80,4 +80,8 @@ contract FireSaleSwapTokens {
     ) external onlyOwner {
         IERC20(tokenAddress).transfer(owner, amount);
     }
+
+       // Allow the contract to receive Ether
+    receive() external payable {
+    }
 }
