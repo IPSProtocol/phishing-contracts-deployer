@@ -8,7 +8,7 @@ import "dotenv/config";
 
 
 
-const { GETH_DEV_PK, HARDHAT_PRIVATE_KEY,DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, PRIVATE_KEY } = process.env;
+const { GETH_DEV_PK, HARDHAT_PRIVATE_KEY, DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, PRIVATE_KEY, DECENTRALIZED_FIREWALL_URL } = process.env;
 
 const config: HardhatUserConfig = {
   paths: {
@@ -19,7 +19,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     decentralized_firewall_testnet: {
-      url: `https://${DECENTRALIZED_FIREWALL_USERNAME}:${DECENTRALIZED_FIREWALL_PASSWORD}@ipschain.ipsprotocol.xyz`,
+      url: `https://${DECENTRALIZED_FIREWALL_USERNAME}:${DECENTRALIZED_FIREWALL_PASSWORD}@${DECENTRALIZED_FIREWALL_URL}`,
       accounts: [`0x${PRIVATE_KEY}`]
     },
     local: {
