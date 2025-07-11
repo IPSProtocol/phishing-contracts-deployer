@@ -18,6 +18,6 @@ ignition/deployments/chain-31337
 
 doc.mf
 
-
 .DS_Store
 
+verify_secrets.sh
