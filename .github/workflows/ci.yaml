@@ -1,37 +1,53 @@
-name: Build & Test Delegatecall Guard
+# .github/workflows/ci.yml
 
-on: [push, pull_request]
+# A descriptive name for your workflow
+name: Hardhat CI
 
+# This section defines the triggers for the workflow.
+# It will run on any push to the 'main' branch and any pull request targeting the 'main' branch.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Defines the jobs that will run as part of the workflow.
 jobs:
+  # We have a single job called 'build-and-test'.
   build-and-test:
+    # The job will run on the latest version of Ubuntu provided by GitHub.
     runs-on: ubuntu-latest
 
+    # The steps that make up the job. These run in sequence.
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      # Step 1: Check out the repository's code
+      # This allows the workflow to access your project files.
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      # Step 2: Set up the Node.js environment
+      # We specify Node.js version 20.x. This action also sets up caching for npm
+      # by default, which will speed up subsequent runs.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20.x'
           cache: 'npm'
 
-      - name: Cache Hardhat & Node Modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            cache
-            artifacts
-          key: ${{ runner.os }}-node20-npm-${{ hashFiles('package-lock.json') }}
+      # Step 3: Install project dependencies
+      # 'npm ci' is used instead of 'npm install' because it's faster and safer
+      # for CI environments, as it installs dependencies exactly as defined in
+      # your package-lock.json file.
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Compile Contracts
+      # Step 4: Compile the smart contracts
+      # This step ensures that all your Solidity contracts compile without errors.
+      - name: Compile contracts
         run: npx hardhat compile
 
-      - name: Run Tests
-        run: npm test
-
-    
+      # Step 5: Run the test suite
+      # This executes all your tests using Hardhat's test runner to ensure
+      # that all contract logic is working as expected.
+      - name: Run tests
+        run: npx hardhat test

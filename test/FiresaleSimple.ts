@@ -28,7 +28,7 @@ describe("FireSale Contract Tests", function () {
         weth = await WETHFactory.deploy();
 
         // Deploy FireSale contract, ensuring args are in the correct order
-        const FireSaleFactory = await ethers.getContractFactory("FireSale", owner);
+        const FireSaleFactory = await ethers.getContractFactory("FireSaleSwapTokens", owner);
         fireSale = await FireSaleFactory.deploy(wbtc.address, weth.address);
         
         await fireSale.deployed();
@@ -65,7 +65,7 @@ describe("FireSale Contract Tests", function () {
             // No approval is given, so this should fail
             await expect(
                 fireSale.connect(addr1).swapExactInput(weth.address, swapAmount)
-            ).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
+            ).to.be.revertedWith("ERC20InsufficientAllowance");
         });
         
         it("should swap WETH for WBTC correctly", async function () {
