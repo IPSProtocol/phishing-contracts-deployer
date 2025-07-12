@@ -4,6 +4,11 @@
 >
 > The smart contracts in this repository are intentionally designed with vulnerabilities for security research and proof-of-concept demonstrations. **DO NOT deploy them on any mainnet or use them with real funds.** The authors are not responsible for any misuse or loss of assets.
 
+## Sponsoring 
+
+This project is supported by the [ETH Rangers Program](https://blog.ethereum.org/2024/12/02/ethrangers-public-goods) and [Ethereum Foundation Ecosystem Support Program (ESP)](https://esp.ethereum.foundation), under Grant #[FY25-1948, Q1-2025](https://blog.ethereum.org/2025/05/08/allocation-q1-25).
+
+
 ## Overview
 
 This repository contains a Hardhat project for deploying and interacting with various proof-of-concept (PoC) smart contracts that simulate common vulnerabilities or flawed logic. It is maintained by IPS Protocol for educational, research, and demonstration purposes.
