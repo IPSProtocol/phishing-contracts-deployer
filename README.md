@@ -1,4 +1,4 @@
-# IPS Protocol: Proof-of-Concept Contract Deployer
+# IPS Protocol: Proof-of-Concept Phishing Contracts Deployer
 
 > **⚠️ WARNING: FOR EDUCATIONAL & RESEARCH USE ONLY ⚠️**
 >
@@ -64,14 +64,11 @@ Now, edit the `.env` file and fill in the required variables:
 ```env
 # The private key of the wallet you want to use for deployment.
 # On a local Hardhat node, you can use one of the default keys provided when you start the node.
-GETH_DEV_PK=your_private_key_here
+PRIVATE_KEY=
 
 # The RPC URL of the network you want to deploy to.
 # This defaults to the standard local Hardhat node URL.
-RPC_URL=http://127.0.0.1:8545
-
-# The Chain ID of the network.
-CHAIN_ID=1337
+SEPOLIA_RPC_URL=
 ```
 
 ## Available Scripts
