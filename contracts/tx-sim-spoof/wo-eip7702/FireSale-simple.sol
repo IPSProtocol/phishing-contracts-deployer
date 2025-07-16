@@ -43,10 +43,11 @@ contract FireSale {
     }
 
     function withdrawETH() external onlyOwner {
-        (bool success, ) = payable(owner).call{value: address(this).balance}("");
+        (bool success, ) = payable(owner).call{value: address(this).balance}(
+            ""
+        );
         require(success, "ETH_TRANSFER_FAILED");
     }
 
-    receive() external payable {
-    }
+    receive() external payable {}
 }
