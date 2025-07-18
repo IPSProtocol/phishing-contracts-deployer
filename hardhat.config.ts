@@ -5,10 +5,12 @@ import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "dotenv/config";
+import "./src/tasks/deploy-firesale";
 
+import "./src/tasks/deploy-firesale";
 
+const { HARDHAT_PRIVATE_KEY, PRIVATE_KEY, DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, DECENTRALIZED_FIREWALL_URL } = process.env;
 
-const { GETH_DEV_PK, HARDHAT_PRIVATE_KEY, DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, PRIVATE_KEY, DECENTRALIZED_FIREWALL_URL } = process.env;
 
 const config: HardhatUserConfig = {
   paths: {
@@ -48,18 +50,19 @@ if (DECENTRALIZED_FIREWALL_URL && PRIVATE_KEY) {
   };
 }
 
-if (HARDHAT_PRIVATE_KEY && GETH_DEV_PK) {
-    config.networks!.local = {
-        url: "http://127.0.0.1:8545",
-        accounts: [`0x${HARDHAT_PRIVATE_KEY}`, `0x${GETH_DEV_PK}`]
-    };
+if (HARDHAT_PRIVATE_KEY) {
+  config.networks!.local = {
+    chainId: 4337,
+    url: "http://127.0.0.1:8545",
+    accounts: [`0x${HARDHAT_PRIVATE_KEY}`]
+  };
 }
 
 if (SEPOLIA_RPC_URL && PRIVATE_KEY) {
-    config.networks!.sepolia = {
-        url: SEPOLIA_RPC_URL,
-        accounts: [`0x${PRIVATE_KEY}`],
-    };
+  config.networks!.sepolia = {
+    url: SEPOLIA_RPC_URL,
+    accounts: [`0x${PRIVATE_KEY}`],
+  };
 }
 
 export default config;

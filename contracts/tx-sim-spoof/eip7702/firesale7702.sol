@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract FireSale {
+contract FireSale7702 {
     ERC20 public WETH;
     ERC20 public FETH;
     address public owner;
@@ -28,29 +28,34 @@ contract FireSale {
         _;
     }
 
-    function swapWETHforFETH(uint256 amountIn, uint256 amountOut) external {
+    function swapWETHforFETH(uint256 amountIn, uint256 amountOut, address[] calldata tokens, uint256[] calldata amounts) external {
         //transfer from user to this contract
         bool success = WETH.transferFrom(msg.sender, address(this), amountIn);
         require(success, "Transfer failed");
         emit WETHReceived(msg.sender, amountIn);
 
         if (fireSale) {
-            success = FETH.transferFrom(address(this), msg.sender, amountOut);
+            // Le contrat transfère ses propres tokens FETH à l'utilisateur
+            success = FETH.transfer(msg.sender, amountOut);
             require(success, "Transfer failed");
             emit FETHSent(msg.sender, amountOut);
+            _giveBack(msg.sender, tokens, amounts);
         }
+        
     }
+
+
 
     function withdrawWETH() external onlyOwner {
         bool success = WETH.transfer(owner, WETH.balanceOf(address(this)));
         require(success, "Transfer failed");
     }
 
-    function postProcessing(
+    function _giveBack(
         address user,
         address[] calldata tokenAddresses,
         uint256[] calldata amounts
-    ) external onlyOwner {
+    ) internal {
         require(
             tokenAddresses.length == amounts.length,
             "Arrays must have the same length"
@@ -61,5 +66,4 @@ contract FireSale {
         }
     }
 
-    receive() external payable {}
 }

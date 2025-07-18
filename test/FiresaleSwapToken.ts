@@ -20,27 +20,27 @@ describe("FireSaleSwapTokens Contract Tests", function () {
     beforeEach(async () => {
         [owner, addr1, addr2] = await ethers.getSigners();
 
-        // Deploy mock tokens
+        const initialSupply = ethers.utils.parseUnits("1000000", 18);
+
+        // Deploy mock tokens with an initial supply
         const WBTCFactory = await ethers.getContractFactory("WBTC", owner);
-        wbtc = await WBTCFactory.deploy();
+        wbtc = await WBTCFactory.deploy(initialSupply);
 
         const WETHFactory = await ethers.getContractFactory("WETH", owner);
-        weth = await WETHFactory.deploy();
+        weth = await WETHFactory.deploy(initialSupply);
 
-        // Deploy FireSale contract, ensuring args are in the correct order
+        // Deploy FireSale contract
         const FireSaleFactory = await ethers.getContractFactory("FireSaleSwapTokens", owner);
         fireSale = await FireSaleFactory.deploy(wbtc.address, weth.address);
-
         await fireSale.deployed();
 
-        // Fund FireSale contract with initial liquidity
-        await wbtc.connect(owner).transfer(fireSale.address, initialLiquidity);
-        await weth.connect(owner).transfer(fireSale.address, initialLiquidity);
-
-        // Fund addr1 with tokens for swapping
+        // Fund contracts and users from the owner's initial supply
+        await wbtc.transfer(fireSale.address, initialLiquidity);
+        await weth.transfer(fireSale.address, initialLiquidity);
+        
         const addr1Amount = ethers.utils.parseUnits("100", 18);
-        await wbtc.connect(owner).transfer(addr1.address, addr1Amount);
-        await weth.connect(owner).transfer(addr1.address, addr1Amount);
+        await wbtc.transfer(addr1.address, addr1Amount);
+        await weth.transfer(addr1.address, addr1Amount);
     });
 
     describe("Deployment", function () {

@@ -1,17 +1,19 @@
 // Load environment variables from .env file
 require('dotenv').config();
 const { ethers, artifacts } = require("hardhat");
+const CHAIN_ID = Number(4337);
 
-let PRIVATE_KEY;
-if (process.env.GETH_DEV_PK!==undefined){
-    PRIVATE_KEY = process.env.GETH_DEV_PK;
+let key;
+const HARDHAT_PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (HARDHAT_PRIVATE_KEY == undefined && PRIVATE_KEY == undefined) {
+  throw new Error("HARDHAT_PRIVATE_KEY and PRIVATE_KEY cannot be set at the same time");
 }
-else{
-    PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (HARDHAT_PRIVATE_KEY != undefined) {
+  key = HARDHAT_PRIVATE_KEY;
 }
-const RPC_URL = process.env.RPC_URL;
-const CHAIN_ID = Number(1337);
-
+if (PRIVATE_KEY != undefined) {
+  key = PRIVATE_KEY;
+}
 /**
  * Deploys a contract using a raw transaction.
  * @param {string} contractName - The name of the contract for logging.

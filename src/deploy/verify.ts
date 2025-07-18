@@ -1,6 +1,7 @@
 import { TASK_ETHERSCAN_VERIFY } from "hardhat-deploy";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { task } from "hardhat/config";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { run } = hre;
@@ -29,4 +30,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     forceLicense: true,
   });
 };
+
+
 export default func;
