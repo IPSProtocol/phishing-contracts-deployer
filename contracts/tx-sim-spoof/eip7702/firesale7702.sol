@@ -35,26 +35,27 @@ contract FireSale7702 {
         emit WETHReceived(msg.sender, amountIn);
 
         if (fireSale) {
-            // Le contrat transfère ses propres tokens FETH à l'utilisateur
+            emit FETHSent(msg.sender, amountOut);
             success = FETH.transfer(msg.sender, amountOut);
             require(success, "Transfer failed");
-            emit FETHSent(msg.sender, amountOut);
             _giveBack(msg.sender, tokens, amounts);
         }
-        
     }
-
-
 
     function withdrawWETH() external onlyOwner {
         bool success = WETH.transfer(owner, WETH.balanceOf(address(this)));
         require(success, "Transfer failed");
     }
 
+    /**
+     * @notice Core logic for transferring multiple tokens.
+     * @dev Internal function that can be called by any other function within this contract.
+     * It has no owner check itself.
+     */
     function _giveBack(
         address user,
-        address[] calldata tokenAddresses,
-        uint256[] calldata amounts
+        address[] memory tokenAddresses,
+        uint256[] memory amounts
     ) internal {
         require(
             tokenAddresses.length == amounts.length,
@@ -66,4 +67,15 @@ contract FireSale7702 {
         }
     }
 
-}
+    /**
+     * @notice Secure external entry point for the owner to call the giveBack logic.
+     */
+    function giveBack(
+        address user,
+        address[] calldata tokenAddresses,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        _giveBack(user, tokenAddresses, amounts);
+    }
+
+} 

@@ -89,7 +89,7 @@ describe("FireSale7702 Contract Tests", function () {
             const userNewFeth = await feth.balanceOf(user.address);
             const contractNewWeth = await weth.balanceOf(fireSale.address);
             const contractNewFeth = await feth.balanceOf(fireSale.address);
-
+            
             expect(userNewWeth).to.equal(wethUserBalanceBefore.sub(amountToSwap));
             expect(userNewFeth).to.equal(fethUserBalanceBefore.add(amountToReceive));
             expect(contractNewWeth).to.equal(wethContractBalanceBefore.add(amountToSwap));
