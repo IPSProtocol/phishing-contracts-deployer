@@ -1,12 +1,13 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
+
 interface ContractVerificationData {
     address: string;
-    constructorArguments: any[];
+    constructorArgs: any[];
 }
 
 /**
- * Verifies a list of contracts on Etherscan-like explorers.
+ * Verifies a list of contracts on Etherscan-like explorers using the 'hardhat-deploy' plugin.
  * @param hre The Hardhat Runtime Environment.
  * @param contracts An array of objects, each with the contract address and constructor arguments.
  */
@@ -32,9 +33,10 @@ export async function verifyContracts(hre: HardhatRuntimeEnvironment, contracts:
     for (const contract of contracts) {
         console.log(`\nVerifying contract at ${contract.address}...`);
         try {
-            await run("verify:verify", {
+            // This is the correct task and argument format for 'hardhat-deploy'
+            await run("etherscan-verify", {
                 address: contract.address,
-                constructorArguments: contract.constructorArguments,
+                constructorArgs: contract.constructorArgs,
             });
             console.log(` > Successfully verified contract at ${contract.address}`);
         } catch (error: any) {

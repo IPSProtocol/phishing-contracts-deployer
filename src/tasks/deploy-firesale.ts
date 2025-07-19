@@ -141,7 +141,7 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
         const { ethers, network } = hre;
         const { weth: wethAddress, wbtc: wbtcAddress, feth: fethAddress, mint: mintAmountStr, fund: fundAmountStr } = taskArgs;
         
-        let contractsToVerify: { address: string, constructorArguments: any[] }[] = [];
+        let contractsToVerify: { address: string, constructorArgs: any[] }[] = [];
 
         console.log(`--- Starting FireSale Deployment on ${network.name} ---`);
 
@@ -163,9 +163,9 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
             [wethContract, wbtcContract, fethContract] = await deployAllContracts(deployer, mintAmountStr, hre);
 
             const constructorArgs = [ethers.utils.parseEther(mintAmountStr)];
-            contractsToVerify.push({ address: wethContract.address, constructorArguments: constructorArgs });
-            contractsToVerify.push({ address: wbtcContract.address, constructorArguments: constructorArgs });
-            contractsToVerify.push({ address: fethContract.address, constructorArguments: constructorArgs });
+            contractsToVerify.push({ address: wethContract.address, constructorArgs: constructorArgs });
+            contractsToVerify.push({ address: wbtcContract.address, constructorArgs: constructorArgs });
+            contractsToVerify.push({ address: fethContract.address, constructorArgs: constructorArgs });
             
             console.log("Minting tokens...");
             // 4. Mint new tokens 
@@ -177,7 +177,7 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
         console.log("\nDeploying FireSale contract...");
         const fireSaleArgs = [wethContract.address, fethContract.address];
         const fireSale = await deployContract(hre, "FireSale7702", deployer, fireSaleArgs);
-        contractsToVerify.push({ address: fireSale.address, constructorArguments: fireSaleArgs });
+        contractsToVerify.push({ address: fireSale.address, constructorArgs: fireSaleArgs });
 
         // 6. Fund FireSale with liquidity if we deployed new tokens
         await fundFireSale(deployer, wethContract, fethContract, fireSale, fundAmountStr)
