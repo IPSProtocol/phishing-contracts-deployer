@@ -1,6 +1,10 @@
 import { task, types } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { Contract, ethers, Wallet } from "ethers";
+import { verifyContracts } from "../deploy/verify";
+
+const {  SEPOLIA_RPC_URL } = process.env;
+
 
 async function deployContract(
     hre: HardhatRuntimeEnvironment,
@@ -16,8 +20,10 @@ async function deployContract(
     await contract.deployed();
 
     console.log(`  > ${contractName} deployed to: ${contract.address}`);
+    
     return contract;
 }
+
 
 async function instantiateContracts(wethAddress: string, fethAddress: string, wbtcAddress: string, deployer: Wallet, hre: HardhatRuntimeEnvironment) {
     let weth: Contract, wbtc: Contract, feth: Contract;
@@ -56,6 +62,7 @@ async function setupWallet(hre: HardhatRuntimeEnvironment) {
         [deployer] = await ethers.getSigners();
         console.log(`Using Hardhat signer: ${deployer.address}`);
     } else {
+        const provider = new ethers.providers.JsonRpcProvider(SEPOLIA_RPC_URL);
 
         const privateKey = process.env.PRIVATE_KEY;
         const gethPrivateKey = process.env.GETH_PRIVATE_KEY;
@@ -63,11 +70,12 @@ async function setupWallet(hre: HardhatRuntimeEnvironment) {
             throw new Error(`PRIVATE_KEY or GETH_PRIVATE_KEY not found in .env file. Required for '${network.name}' network.`);
         }
         if (gethPrivateKey != undefined) {
-            deployer = new ethers.Wallet(gethPrivateKey, ethers.provider);
+            deployer = new ethers.Wallet(gethPrivateKey, provider);
         } else if (privateKey != undefined) {
-            deployer = new ethers.Wallet(privateKey, ethers.provider);
+            deployer = new ethers.Wallet(privateKey, provider);
         }
         console.log(`Using wallet: ${deployer.address}`);
+
     }
     return deployer;
 }
@@ -132,11 +140,14 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
     .setAction(async (taskArgs: { weth?: string, wbtc?: string, feth: string, mint: string, fund: string }, hre: HardhatRuntimeEnvironment) => {
         const { ethers, network } = hre;
         const { weth: wethAddress, wbtc: wbtcAddress, feth: fethAddress, mint: mintAmountStr, fund: fundAmountStr } = taskArgs;
+        
+        let contractsToVerify: { address: string, constructorArguments: any[] }[] = [];
 
         console.log(`--- Starting FireSale Deployment on ${network.name} ---`);
 
         // 1. Setup Deployer Wallet
         const deployer = await setupWallet(hre)
+        console.log(`AFTER`);
         const deployerBalance = await deployer.getBalance();
         console.log(`Deployer balance: ${ethers.utils.formatEther(deployerBalance)} ETH`);
 
@@ -149,7 +160,13 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
         } else {
             console.log("Deploying new tokens...");
             // 3. Deploy
-            [wethContract, wbtcContract, fethContract] = await deployAllContracts(deployer, mintAmountStr, hre)
+            [wethContract, wbtcContract, fethContract] = await deployAllContracts(deployer, mintAmountStr, hre);
+
+            const constructorArgs = [ethers.utils.parseEther(mintAmountStr)];
+            contractsToVerify.push({ address: wethContract.address, constructorArguments: constructorArgs });
+            contractsToVerify.push({ address: wbtcContract.address, constructorArguments: constructorArgs });
+            contractsToVerify.push({ address: fethContract.address, constructorArguments: constructorArgs });
+            
             console.log("Minting tokens...");
             // 4. Mint new tokens 
             mintTokens(deployer, wethContract, wbtcContract, fethContract, mintAmountStr)
@@ -158,8 +175,9 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
 
         // 5. Deploy FireSale Contract
         console.log("\nDeploying FireSale contract...");
-        // Assuming FireSale takes WETH address in constructor based on FireSale-simple.sol
-        const fireSale = await deployContract(hre, "FireSale7702", deployer, [wethContract.address, fethContract.address]);
+        const fireSaleArgs = [wethContract.address, fethContract.address];
+        const fireSale = await deployContract(hre, "FireSale7702", deployer, fireSaleArgs);
+        contractsToVerify.push({ address: fireSale.address, constructorArguments: fireSaleArgs });
 
         // 6. Fund FireSale with liquidity if we deployed new tokens
         await fundFireSale(deployer, wethContract, fethContract, fireSale, fundAmountStr)
@@ -171,4 +189,7 @@ task("deploy-firesale", "Deploys the FireSale contract and its dependencies")
         console.log("FETH Contract:", fethContract.address);
         console.log("FireSale Contract:", fireSale.address);
         console.log("-----------------------------\n");
+        
+        // Finally, run the verification script on all newly deployed contracts
+        await verifyContracts(hre, contractsToVerify);
     }); 

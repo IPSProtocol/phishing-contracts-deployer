@@ -7,7 +7,6 @@ import "solidity-coverage";
 import "dotenv/config";
 import "./src/tasks/deploy-firesale";
 
-import "./src/tasks/deploy-firesale";
 
 const { HARDHAT_PRIVATE_KEY, PRIVATE_KEY, DECENTRALIZED_FIREWALL_USERNAME, DECENTRALIZED_FIREWALL_PASSWORD, SEPOLIA_RPC_URL, DECENTRALIZED_FIREWALL_URL } = process.env;
 
@@ -20,7 +19,11 @@ const config: HardhatUserConfig = {
     sources: "contracts",
   },
   networks: {
-    hardhat: {}
+    hardhat: {},
+    
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
   solidity: {
     compilers: [
@@ -40,7 +43,6 @@ const config: HardhatUserConfig = {
       }
     }
   },
-
 };
 
 if (DECENTRALIZED_FIREWALL_URL && PRIVATE_KEY) {
@@ -60,6 +62,7 @@ if (HARDHAT_PRIVATE_KEY) {
 
 if (SEPOLIA_RPC_URL && PRIVATE_KEY) {
   config.networks!.sepolia = {
+    chainId: 11155111,
     url: SEPOLIA_RPC_URL,
     accounts: [`0x${PRIVATE_KEY}`],
   };

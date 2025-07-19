@@ -1,35 +1,49 @@
-import { TASK_ETHERSCAN_VERIFY } from "hardhat-deploy";
-import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { task } from "hardhat/config";
 
-const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  const { run } = hre;
-  if (!["rinkeby", "mainnet"].includes(hre.network.name)) {
-    return;
-  }
+interface ContractVerificationData {
+    address: string;
+    constructorArguments: any[];
+}
 
-  if (!process.env.INFURA_KEY) {
-    console.log(
-      `Could not find Infura key in env, unable to connect to network ${hre.network.name}`
-    );
-    return;
-  }
+/**
+ * Verifies a list of contracts on Etherscan-like explorers.
+ * @param hre The Hardhat Runtime Environment.
+ * @param contracts An array of objects, each with the contract address and constructor arguments.
+ */
+export async function verifyContracts(hre: HardhatRuntimeEnvironment, contracts: ContractVerificationData[]) {
+    const { run, network } = hre;
 
-  console.log("Verification of Protect Guard in etherscan...");
-  console.log("Waiting for 1 minute before verifying contracts...");
-  // Etherscan needs some time to process before trying to verify.
-  await new Promise((resolve) => setTimeout(resolve, 60000));
+    if (network.name === "hardhat" || network.name === "localhost") {
+        console.log(`Skipping verification on local network '${network.name}'.`);
+        return;
+    }
 
-  console.log("Starting to verify now");
+    if (!process.env.ETHERSCAN_API_KEY) {
+        console.log("ETHERSCAN_API_KEY not found in .env, skipping verification.");
+        return;
+    }
 
-  await run(TASK_ETHERSCAN_VERIFY, {
-    apiKey: process.env.ETHERSCAN_KEY_API,
-    license: "ISC",
-    solcInput: true,
-    forceLicense: true,
-  });
-};
+    console.log("\n--- Starting Etherscan Verification ---");
+    console.log(`Verifying ${contracts.length} contract(s) on ${network.name}...`);
+    
+    // It's better to wait a bit for Etherscan to index the transactions.
+    await new Promise((resolve) => setTimeout(resolve, 60000)); 
 
-
-export default func;
+    for (const contract of contracts) {
+        console.log(`\nVerifying contract at ${contract.address}...`);
+        try {
+            await run("verify:verify", {
+                address: contract.address,
+                constructorArguments: contract.constructorArguments,
+            });
+            console.log(` > Successfully verified contract at ${contract.address}`);
+        } catch (error: any) {
+            if (error.message.toLowerCase().includes("already verified")) {
+                console.log(` > Contract at ${contract.address} is already verified.`);
+            } else {
+                console.error(` > Verification failed for contract at ${contract.address}:`, error);
+            }
+        }
+    }
+    console.log("\n--- Verification Complete ---");
+}
